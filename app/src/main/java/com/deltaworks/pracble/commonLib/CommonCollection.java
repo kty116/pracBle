@@ -74,7 +74,7 @@ public class CommonCollection {
             zeroDeleteCarSpeed = firstZeroDeleteCarSpeed;
         }
 
-        Log.d(TAG, "MeasureDistance: " + zeroDeleteCarSpeed);
+//        Log.d(TAG, "MeasureDistance: " + zeroDeleteCarSpeed);
         //거리 = 속도 * 시간
         double distance = 0;
         if (zeroDeleteCarSpeed != null) {

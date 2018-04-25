@@ -36,37 +36,10 @@ public class MainActivity extends AppCompatActivity {
 
     public static boolean sVisibleActivity;  //화면 보이면 노티 눌렀을때 다시 액티비티 켜지지 않게 설정하는 변수
 
-    public static boolean Cycle_rcvStart = false;
-    public static boolean Info_rcv = false;
-
-    public static boolean Log_rcvStart = false;
-    public static boolean Keyevent_rcvStart = false;
-
-    public static int CycleData_Index = 0;
-    public int Rcv_Cnt = 0;
-
-    public static byte[] CycleData = new byte[164];    // Ts2에서 오는 정주기
-
-    public String UUID_SERVICE = "0003cdd0-0000-1000-8000-00805f9b0131";
-
-    public String UUID_CHAR_WRITE = "0003cdd1-0000-1000-8000-00805f9b0131";
-    public String UUID_CHAR_READ = "0003cdd2-0000-1000-8000-00805f9b0131";
-
-    public String UUID_DESCRIPTOR = "00002902-0000-1000-8000-00805f9b34fb";
-    public String UUID_DESCRIPTOR_WRITE = "00002902-0000-1000-8000-00805f9b34fb";
-    public String UUID_DESCRIPTOR_READ = "00002902-0000-1000-8000-00805f9b34fb";
-
-    private static int TIME_OUT_SCAN = 10000;
-
-    public static final String DEVICE_NAME = "TS2_BLE";
-    public boolean isAutoConnect = true;
-    public boolean isDiscoverBle = false;
     public static final String TAG = MainActivity.class.getSimpleName();
     private ActivityMainBinding binding;
     private Intent mGattServiceIntent;
     public static BluetoothAdapter mBluetoothAdapter;
-
-    //    public Activity
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -98,7 +71,6 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
-        // Inflate the menu; this adds items to the action bar if it is present.
         getMenuInflater().inflate(R.menu.menu_main, menu);
         return true;
     }

@@ -41,6 +41,7 @@ import com.deltaworks.pracble.event.DTGCarDataEvent;
 import com.deltaworks.pracble.event.Event;
 import com.deltaworks.pracble.event.StartConnectEvent;
 import com.deltaworks.pracble.event.ToastEvent;
+import com.deltaworks.pracble.model.DTGBasicData;
 import com.deltaworks.pracble.model.DTGInfo;
 import com.deltaworks.pracble.model.FileInfo;
 import com.deltaworks.pracble.model.FileRequestBody;
@@ -90,7 +91,8 @@ public class MainService extends Service {
 
     public static final String DEVICE_NAME = "TS2_BLE";
 
-    public static final String DEVICE_MAC = "BB:A0:50:56:CA:95"; //디바이스 주소
+    public BleDevice mBleDevice; //디바이스 주소
+    public boolean isBleDevice = false;
     public boolean isAutoConnect = true;
     public boolean isDiscoverBle = false;
 
@@ -110,7 +112,9 @@ public class MainService extends Service {
      */
     private boolean isDTGSerialNumber;
     private String mDTGSerialNumber;
+
     public static final String DTG_SERIAL_NUMBER = "dtg_serial_number";  //dtg 시리얼 번호
+    public static final String DTG_BASIC_DATA = "dtg_basic_data";  //dtg 시리얼 번호
     public static final String DTG_BLE_MAC = "dtg_ble_mac";  //dtg ble 주소값
     // TODO: 2018-04-17 시리얼부분 가져와서 한번만 저장하게 셋팅
     private String mTokenNumber = "true";
@@ -118,7 +122,7 @@ public class MainService extends Service {
     /**
      * 데이터 보내기 관련 알람 변수
      */
-    public long UPLOAD_TIME = 1000 * 60;  //10분  >> 앱 처음 로드시 인터넷 연결 안돼있을때 초기값
+    public long UPLOAD_TIME = 1000 * 60;  //1분  >> 앱 처음 로드시 인터넷 연결 안돼있을때 초기값
     private long SEND_LOCATION_DATA_TIME = 1000;  // gps 데이터 보내는 주기 변수 30초
     public static final String ACTION_ALARM_DTG_DATA = "action_alarm_dtg_data";
     public static final String ACTION_ALARM_DTG_LOCATION = "action_alarm_dtg_location";
@@ -128,6 +132,8 @@ public class MainService extends Service {
     private boolean isSentDTGData = true;  //인터넷 상태 변경 리시버에서 데이터 못보냈을때 타는 루트 조건을 false로 했기때문에 기본값 true
     private boolean isSentLocationData = true;
     private int mIdOfLastData;
+
+    private int limitTheNumberOfFiles = 1;
 
     /**
      * 블루투스 연결시 데이터 성공적으로 오는지 확인하는 알람 변수
@@ -153,6 +159,10 @@ public class MainService extends Service {
     /**
      * 파싱 변수
      */
+
+    private String mCarLatText;
+    private String mCarLonText;
+
     public static boolean Cycle_rcvStart = false;
     public static boolean Info_rcv = false;
 
@@ -179,8 +189,7 @@ public class MainService extends Service {
      * socket io
      */
     private Socket mSocket;
-    private String mCarLatText;
-    private String mCarLonText;
+
 
     {
         try {
@@ -204,11 +213,7 @@ public class MainService extends Service {
         super.onCreate();
 
         registerReceiver(mInternetReceiver, new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION));  //인터넷 연결 상태 브로드캐스트 리시버 등록
-        BleManager.getInstance().init(getApplication());
-        BleManager.getInstance()
-                .enableLog(true)
-                .setOperateTimeout(5000);
-        setScanRule();
+
         Stetho.initializeWithDefaults(this);
         EventBus.getDefault().register(this);
 
@@ -218,19 +223,47 @@ public class MainService extends Service {
         mSocket.connect();  //socket io 연결
         ////////////////////////////////////////////////////////////////////////////////
 
-        mTinySharedPreference = new TinyDB(getApplicationContext());
-        String dtgSerialNumber = mTinySharedPreference.getString(DTG_SERIAL_NUMBER);
-        Log.d(TAG, "dtg: " + dtgSerialNumber);
-        String dgtBleMac = mTinySharedPreference.getString(DTG_BLE_MAC);
+//        uploadFileToServer(mFolderPath.getAbsolutePath());
 
-        if (!dtgSerialNumber.equals("")) { //값 있으면 값 넣고
-            Log.d(TAG, "dtgSerialNumber true: " + dtgSerialNumber);
-            mDTGSerialNumber = dtgSerialNumber;
-            isDTGSerialNumber = true;
+        mTinySharedPreference = new TinyDB(getApplicationContext());
+        DTGBasicData mDTGBasicData = mTinySharedPreference.getObject(DTG_BASIC_DATA, DTGBasicData.class);
+
+        if (mDTGBasicData != null) {  // 디티지 기본값이 있을때
+
+            mDTGSerialNumber = mDTGBasicData.getDtgSerialNumber();
+            mBleDevice = mDTGBasicData.getBleDevice();
+            Log.d(TAG, "mDTGSerialNumber: " + mDTGSerialNumber + mBleDevice);
+
+            if (mDTGSerialNumber != null) {  //시리얼번호가 있을때
+
+                isDTGSerialNumber = true;
+            } else {
+                isDTGSerialNumber = false;
+            }
+
+            if (mBleDevice != null) {  // BLE 정보가 있을때
+                isBleDevice = true;
+            } else {
+                isBleDevice = false;
+            }
+
         } else {
-            Log.d(TAG, "dtgSerialNumber false:" + isDTGSerialNumber);
-            isDTGSerialNumber = false;
+            Log.d(TAG, "mDTGBasicData: 값 없음");
         }
+
+        //////////////////블루투스 설정//////////////////
+        BleManager.getInstance().init(getApplication());
+        BleManager.getInstance()
+                .enableLog(true)
+                .setOperateTimeout(5000);
+        setScanRule(isBleDevice);
+
+//        if(isBleDevice){  //디바이스가 있으면
+//            connect(mBleDevice);
+//        }
+
+        /////////////////////////////////////////////////
+
 
         mRetrofit = new RetrofitLib();
         mCommon = new CommonCollection(this);
@@ -401,17 +434,26 @@ public class MainService extends Service {
     /**
      * 스캔 룰 셋팅
      */
-    private void setScanRule() {
+    private void setScanRule(boolean isBleDevice) {
 
-        BleScanRuleConfig scanRuleConfig = new BleScanRuleConfig.Builder()
-
+        if (isBleDevice) {
+            BleScanRuleConfig scanRuleConfig = new BleScanRuleConfig.Builder()
 //                .setServiceUuids(serviceUuids)      // 只扫描指定的服务的设备，可选
-                .setDeviceName(true, DEVICE_NAME)   // 只扫描指定广播名的设备，可选
-//                .setDeviceMac(DEVICE_MAC)                  // 只扫描指定mac的设备，可选
-                .setAutoConnect(true)      // 连接时的autoConnect参数，可选，默认false
-                .setScanTimeOut(TIME_OUT_SCAN)              // 扫描超时时间，可选，默认10秒
-                .build();
-        BleManager.getInstance().initScanRule(scanRuleConfig);
+                    .setDeviceName(true, DEVICE_NAME)   // 只扫描指定广播名的设备，可选
+                    .setDeviceMac(mBleDevice.getMac())  // 只扫描指定mac的设备，可选  //BLE주소값 있으면 설정
+                    .setAutoConnect(true)      // 连接时的autoConnect参数，可选，默认false
+                    .setScanTimeOut(TIME_OUT_SCAN)              // 扫描超时时间，可选，默认10秒
+                    .build();
+            BleManager.getInstance().initScanRule(scanRuleConfig);
+        } else {
+            Log.d(TAG, "dtgBleMac: setScanRule");
+            BleScanRuleConfig scanRuleConfig = new BleScanRuleConfig.Builder()
+                    .setDeviceName(true, DEVICE_NAME)   // 只扫描指定广播名的设备，可选
+                    .setAutoConnect(true)      // 连接时的autoConnect参数，可选，默认false
+                    .setScanTimeOut(TIME_OUT_SCAN)              // 扫描超时时间，可选，默认10秒
+                    .build();
+            BleManager.getInstance().initScanRule(scanRuleConfig);
+        }
 
     }
 
@@ -428,7 +470,13 @@ public class MainService extends Service {
                 Log.d(TAG, "onLeScan: ");
                 if (!isDiscoverBle) {
                     if (bleDevice.getName() != null) {
-                        if (bleDevice.getMac().equals(DEVICE_MAC)) {
+                        if (bleDevice.getName().equals(DEVICE_NAME)) {
+                            Log.d(TAG, "onLeScan: bleDevice.getMac().equals(DEVICE_NAME)");
+                            if (!isBleDevice) { //bledevice 정보 없으면 저장
+                                Log.d(TAG, "mDTGBasicData: isBleDevice값들어감");
+                                mTinySharedPreference.putObject(DTG_BASIC_DATA, new DTGBasicData(bleDevice, mDTGSerialNumber));
+                                mBleDevice = bleDevice;
+                            }
                             isDiscoverBle = true;
                             BleManager.getInstance().cancelScan();
                             Handler handler = new Handler(Looper.getMainLooper());
@@ -591,15 +639,17 @@ public class MainService extends Service {
                     EventBus.getDefault().post(new DTGCarDataEvent(dtgInfo));  //보이는 화면으로 이벤트 보내기
 
 //                    Log.d(TAG, "onCharacteristicChanged: " + dtgInfo.toString());
+                    if (!dtgInfo.getCarSpeed().equals("000")) {  //속도 000이 아닐때만 저장
+                        insertData(dtgInfo); //데이터 데이터베이스에 붙이기
+                    }
 
-//                    insertData(dtgInfo); //데이터 데이터베이스에 붙이기
 
                     /////////////////////////////알람매니저 시작////////////////////////////
-//                    if (!isStartedDataAlarm) {
-//                        Log.d(TAG, "알람 시작 Data++");
-//                        isStartedDataAlarm = true; //알람 시작했으니 알람 끝날때까지는 등록 못함
-//                        setDataAlarm(true);  //차 데이터 알람 시작
-//                    }
+                    if (!isStartedDataAlarm) {
+                        Log.d(TAG, "알람 시작 Data++");
+                        isStartedDataAlarm = true; //알람 시작했으니 알람 끝날때까지는 등록 못함
+                        setDataAlarm(true);  //차 데이터 알람 시작
+                    }
 //                    if (!isStartedLocationAlarm) {
 //                        Log.d(TAG, "알람 시작 Location++");
 //                        isStartedLocationAlarm = true;
@@ -893,7 +943,7 @@ public class MainService extends Service {
 //        if (mCommon.checkNetwork() == 1) {  //1은 wifi 연결됐을 때
             //압축파일 만들어 보내기
             Cursor dtgData = mFacade.queryDTGAllData();
-            if (dtgData != null) {  //data에 값이 있을때
+            if (dtgData != null && dtgData.getCount() > 0) { //데이터에 값 있을때
                 if (dbDataToFile()) {
                     Log.d(TAG, "setUploadFileToServer: 파일보내기");
                     uploadFileToServer(mFolderPath.getAbsolutePath());
@@ -937,83 +987,95 @@ public class MainService extends Service {
 
         isSentDTGData = true;
 
-        final ArrayList<FileRequestBody> partArrayList = new ArrayList<>();  //보낼 파일 리스트
-
+        final ArrayList<FileRequestBody> mFilePartArrayList = new ArrayList<>(); //서버로 보낼 파일 리스트
         final File files = new File(folderPath);
+
 
         files.listFiles(new FilenameFilter() {
             @Override
             public boolean accept(File dir, String name) {
-                if (name.contains(mDTGSerialNumber)) {  //이름에 mDTGSerialNumber 들어가는 파일
+                if (mFilePartArrayList.size() < limitTheNumberOfFiles) { //fileCount 보다 적으면 계속 루트 타고
+                    if (name.contains(mDTGSerialNumber)) {  //이름에 mDTGSerialNumber 들어가는 파일
 
-                    File file = new File(dir + "/" + name);
-                    Log.d(TAG, "accept: " + file);
-                    RequestBody requestFile = RequestBody.create(MediaType.parse("/*"), file);
+                        File file = new File(dir + "/" + name);
+                        Log.d(TAG, "accept: " + file);
+                        RequestBody requestFile = RequestBody.create(MediaType.parse("/*"), file);
 
-                    partArrayList.add(new FileRequestBody(requestFile, file.getName()));
+                        mFilePartArrayList.add(new FileRequestBody(requestFile, file.getName()));
+                    }
                 }
                 return true;
             }
         });
+//        for (int i = 0; i < partArrayList.size(); i++) {
+//            Log.d(TAG, "uploadFileToServer: " + partArrayList.get(i).getFileName());
+//        }
+//        Log.d(TAG, "uploadFileToServer: " + partArrayList.size());
+        if (mFilePartArrayList.size() != 0) {  //파일이 있으면
+            Log.d(TAG, "uploadFileToServer: 파일 있음 0아님");
+            Log.d(TAG, "setRetrofit: " + mFilePartArrayList.size());
 
-        Log.d(TAG, "setRetrofit: " + partArrayList.size());
+            RequestBody token = RequestBody.create(MediaType.parse("text/plain"), mTokenNumber);
+            RequestBody dtgNum = RequestBody.create(MediaType.parse("text/plain"), mDTGSerialNumber);
 
-        RequestBody token = RequestBody.create(MediaType.parse("text/plain"), mTokenNumber);
-        RequestBody dtgNum = RequestBody.create(MediaType.parse("text/plain"), mDTGSerialNumber);
-
-        Map<String, RequestBody> requestBodyMap = new HashMap<>();
-        requestBodyMap.put("token", token);
-        requestBodyMap.put("dtgNum", dtgNum);
-
-
-        for (int i = 0; i < partArrayList.size(); i++) {
-            String fileName = "dtg_file[]\"; filename=\"" + partArrayList.get(i).getFileName();
-            requestBodyMap.put(fileName, partArrayList.get(i).getRequestBody());
-        }
-
-        Call<FileInfo> fileInfoCall = mRetrofit.getRetrofit().uploadDTGFile(requestBodyMap);
-
-        fileInfoCall.enqueue(new Callback<FileInfo>() {
-
-            @Override
-            public void onResponse(Call<FileInfo> call, Response<FileInfo> response) {
+            Map<String, RequestBody> requestBodyMap = new HashMap<>();
+            requestBodyMap.put("token", token);
+            requestBodyMap.put("dtgNum", dtgNum);
 
 
-                if (response.isSuccessful()) {
-                    Log.d(TAG, "파일 올리기 성공");
-                    Log.d(TAG, "json 값: " + response.body());
-                    System.out.println(response.body());
+            for (int i = 0; i < mFilePartArrayList.size(); i++) {
+                String fileName = "dtg_file[]\"; filename=\"" + mFilePartArrayList.get(i).getFileName();
+                requestBodyMap.put(fileName, mFilePartArrayList.get(i).getRequestBody());
+            }
 
-                    FileInfo fileInfo = response.body();
 
-                    ArrayList<String> files = fileInfo.fileName;
-                    for (int i = 0; i < files.size(); i++) {
-//                        Log.d(TAG, "onResponse: " + files.get(i));
-                        if (mFileLib.deleteFile(files.get(i))) {
-                            Log.d(TAG, "onResponse: " + files.get(i) + "삭제됨");
+            Call<FileInfo> fileInfoCall = mRetrofit.getRetrofit().uploadDTGFile(requestBodyMap);
+
+            fileInfoCall.enqueue(new Callback<FileInfo>() {
+
+                @Override
+                public void onResponse(Call<FileInfo> call, Response<FileInfo> response) {
+
+
+                    if (response.isSuccessful()) {
+                        Log.d(TAG, "파일 올리기 성공");
+                        Log.d(TAG, "json 값: " + response.body());
+                        System.out.println(response.body());
+
+                        FileInfo fileInfo = response.body();
+
+                        ArrayList<String> files = fileInfo.fileName;
+                        for (int i = 0; i < files.size(); i++) {
+                            Log.d(TAG, "onResponse: " + files.get(i));
+                            if (mFileLib.deleteFile(files.get(i))) {
+                                Log.d(TAG, "onResponse: " + files.get(i) + "삭제됨");
+                            }
                         }
+
+
+                        if (mFilePartArrayList.size() >= limitTheNumberOfFiles) { //5랑 같거나 많으면 계속 루트 타고
+                            //파일 있음
+                            uploadFileToServer(mFolderPath.getAbsolutePath());
+                        } else {
+                            //현재 파일은 더이상 없으니 끝낸다.
+                            isSentDTGData = true;  //업로드 성공시 true 바뀐다
+                        }
+
                     }
-
-
-                    isSentDTGData = true;  //업로드 성공시 true 바뀐다
-
-
-//                    for (int i = 0; i < ; i++) {
-//                        deleteFile(mPartArrayList.get(i).body().)
-                    // TODO: 2018-03-14 올라간 파일 이름 리턴 받아서 파일 삭제
-//                    }
                 }
-            }
 
-            @Override
-            public void onFailure(Call<FileInfo> call, Throwable t) {
-                Log.d(TAG, "파일 올리기 실패: " + t.toString());
+                @Override
+                public void onFailure(Call<FileInfo> call, Throwable t) {
+                    Log.d(TAG, "파일 올리기 실패: " + t.toString());
+                    Log.d(TAG, call.toString());
+                    isSentDTGData = true;
+                }
 
-                Log.d(TAG, call.toString());
-//                isSentDTGData = false;  //업로드 실패시 바뀐다
-            }
-
-        });
+            });
+        } else {
+            Log.d(TAG, "uploadFileToServer: 파일 없음");
+            isSentDTGData = true;  //업로드 성공시 true 바뀐다
+        }
     }
 
     /**
@@ -1021,6 +1083,7 @@ public class MainService extends Service {
      * 업로드 성공시 isSentLocationData = true
      * 업로드 실패시 isSentLocationData = false
      */
+
     public void sendLocationToServer() {
 
 
@@ -1042,7 +1105,6 @@ public class MainService extends Service {
             public void onFailure(Call<ResponseInfo> call, Throwable t) {
                 Log.d(TAG, "실패" + t.toString());
 
-//                isSentLocationData = false;  //업로드 실패시 바뀐다
             }
 
         });
@@ -1181,256 +1243,258 @@ public class MainService extends Service {
                     }
 
                     String carSpeedText = str;
-                    if (!carSpeedText.equals("000")) { //속도가 0일때는 나머지 데이터를 저장하지않는다
-                        //차량 속도
+//                    if (!carSpeedText.equals("000")) { //속도가 0일때는 나머지 데이터를 저장하지않는다
+                    //차량 속도
 
-                        mCommon.MeasureDistance(carSpeedText);
-                        double currentDistance = mCommon.MeasureDistance(carSpeedText);
-                        Log.d(TAG, "dataParsing: " + currentDistance);
+                    mCommon.MeasureDistance(carSpeedText);
+                    double currentDistance = mCommon.MeasureDistance(carSpeedText);
+//                    Log.d(TAG, "dataParsing: " + currentDistance);
 
-                        mTotalDistance += currentDistance;
+                    mTotalDistance += currentDistance;
 
-                        if (mTotalDistance > 15) {
-                            setSendLocationToServer();
-                            Log.d(TAG, "dataParsing: " + mTotalDistance + "서버로 전송");
-                            mTotalDistance = 0;
-                        }
+                    if (mTotalDistance > 15) {
+                        setSendLocationToServer();
+//                        Log.d(TAG, "dataParsing: " + mTotalDistance + "서버로 전송");
+                        mTotalDistance = 0;
+                    }
 
-                        /////////////////////////////////////////
+                    /////////////////////////////////////////
 
-                        // 정보 발생일시
-                        int[] date = new int[14]; // 14자리
-                        int dateIndex = 29; // CycleData의 배열의 자리
-                        for (int i = 0; i < date.length; i++) {
-                            date[i] = CycleData[dateIndex];
-                            dateIndex++;
-                        }
+                    // 정보 발생일시
+                    int[] date = new int[14]; // 14자리
+                    int dateIndex = 29; // CycleData의 배열의 자리
+                    for (int i = 0; i < date.length; i++) {
+                        date[i] = CycleData[dateIndex];
+                        dateIndex++;
+                    }
+
+                    str = "";
+                    for (int i : date) {
+                        str += Character.toString((char) i);
+
+                    }
+                    //날짜
+                    String carDateText = str;
+                    /////////////////////////////////////////
+
+                    int[] totalDist = new int[7];
+                    totalDist[0] = CycleData[43];
+                    totalDist[1] = CycleData[44];
+                    totalDist[2] = CycleData[45];
+                    totalDist[3] = CycleData[46];
+                    totalDist[4] = CycleData[47];
+                    totalDist[5] = CycleData[48];
+                    totalDist[6] = CycleData[49];
+
+                    str = "";
+                    for (int i : totalDist) {
+                        str += Character.toString((char) i);
+
+                    }
+
+                    //누적 주행 거리
+                    String carTotalDistText = str;
+
+                    /////////////////////////////////////////
+                    int[] dailyDist = new int[4];
+                    dailyDist[0] = CycleData[50];
+                    dailyDist[1] = CycleData[51];
+                    dailyDist[2] = CycleData[52];
+                    dailyDist[3] = CycleData[53];
+
+                    str = "";
+                    for (int i : dailyDist) {
+                        str += Character.toString((char) i);
+
+                    }
+                    //일일 주행 거리
+                    String carDailyDistText = str;
+
+                    /////////////////////////////////////////
+
+                    int[] rpm = new int[4];
+                    rpm[0] = CycleData[57];
+                    rpm[1] = CycleData[58];
+                    rpm[2] = CycleData[59];
+                    rpm[3] = CycleData[60];
+                    str = "";
+                    for (int i : rpm) {
+                        str += Character.toString((char) i);
+
+                    }
+
+                    // rpm = 1분당 엔진 회전수
+                    String carEngineRpmText = str;
+
+                    /////////////////////////////////////////
+                    if (CycleData[61] == 0x30) {
+                        str = "Break Off";
+                    } else {
+                        str = "Break On";
+                    }
+
+                    // 브레이크
+                    String carBreakText = str;
+                    /////////////////////////////////////////
+                    int[] lon = new int[9];
+                    lon[0] = CycleData[62];
+                    lon[1] = CycleData[63];
+                    lon[2] = CycleData[64];
+                    lon[3] = CycleData[65];
+                    lon[4] = CycleData[66];
+                    lon[5] = CycleData[67];
+                    lon[6] = CycleData[68];
+                    lon[7] = CycleData[69];
+                    lon[8] = CycleData[70];
+                    str = "";
+                    for (int i : lon) {
+                        str += Character.toString((char) i);
+
+                    }
+                    String carLon;
+                    if (!str.equals("000000000")) {
+                        carLon = parserLonAndLat(str);
+                    } else {
+                        carLon = str;
+                    }
+                    // 차량 위치 - 경도
+                    mCarLonText = carLon;
+                    /////////////////////////////////////////
+                    int[] lat = new int[9];
+                    lat[0] = CycleData[71];
+                    lat[1] = CycleData[72];
+                    lat[2] = CycleData[73];
+                    lat[3] = CycleData[74];
+                    lat[4] = CycleData[75];
+                    lat[5] = CycleData[76];
+                    lat[6] = CycleData[77];
+                    lat[7] = CycleData[78];
+                    lat[8] = CycleData[79];
+                    str = "";
+                    for (int i : lat) {
+                        str += Character.toString((char) i);
+
+                    }
+                    String carLat;
+                    if (!str.equals("000000000")) {
+                        carLat = parserLonAndLat(str);
+                    } else {
+                        carLat = str;
+                    }
+                    // 차량 위치 - 위도
+                    mCarLatText = carLat;
+                    /////////////////////////////////////////
+                    int[] gps = new int[3];
+                    gps[0] = CycleData[80];
+                    gps[1] = CycleData[81];
+                    gps[2] = CycleData[82];
+
+                    str = "";
+                    for (int i : gps) {
+                        str += Character.toString((char) i);
+
+                    }
+
+                    //차량 위치 gps 방위각
+                    String carAzimuthText = str;
+                    /////////////////////////////////////////
+                    String carSleepText = "0";
+
+                    if (!carSpeedText.equals("000")) {  //속도 0이 아닐때
+                        int[] sleep = new int[2];
+                        sleep[0] = CycleData[149];
+                        sleep[1] = CycleData[150];
 
                         str = "";
-                        for (int i : date) {
+                        for (int i : sleep) {
                             str += Character.toString((char) i);
 
                         }
-                        //날짜
-                        String carDateText = str;
-                        /////////////////////////////////////////
 
-                        int[] totalDist = new int[7];
-                        totalDist[0] = CycleData[43];
-                        totalDist[1] = CycleData[44];
-                        totalDist[2] = CycleData[45];
-                        totalDist[3] = CycleData[46];
-                        totalDist[4] = CycleData[47];
-                        totalDist[5] = CycleData[48];
-                        totalDist[6] = CycleData[49];
-
-                        str = "";
-                        for (int i : totalDist) {
-                            str += Character.toString((char) i);
-
-                        }
-
-                        //누적 주행 거리
-                        String carTotalDistText = str;
-
-                        /////////////////////////////////////////
-                        int[] dailyDist = new int[4];
-                        dailyDist[0] = CycleData[50];
-                        dailyDist[1] = CycleData[51];
-                        dailyDist[2] = CycleData[52];
-                        dailyDist[3] = CycleData[53];
-
-                        str = "";
-                        for (int i : dailyDist) {
-                            str += Character.toString((char) i);
-
-                        }
-                        //일일 주행 거리
-                        String carDailyDistText = str;
-
-                        /////////////////////////////////////////
-
-                        int[] rpm = new int[4];
-                        rpm[0] = CycleData[57];
-                        rpm[1] = CycleData[58];
-                        rpm[2] = CycleData[59];
-                        rpm[3] = CycleData[60];
-                        str = "";
-                        for (int i : rpm) {
-                            str += Character.toString((char) i);
-
-                        }
-
-                        // rpm = 1분당 엔진 회전수
-                        String carEngineRpmText = str;
-
-                        /////////////////////////////////////////
-                        if (CycleData[61] == 0x30) {
-                            str = "Break Off";
-                        } else {
-                            str = "Break On";
-                        }
-
-                        // 브레이크
-                        String carBreakText = str;
-                        /////////////////////////////////////////
-                        int[] lon = new int[9];
-                        lon[0] = CycleData[62];
-                        lon[1] = CycleData[63];
-                        lon[2] = CycleData[64];
-                        lon[3] = CycleData[65];
-                        lon[4] = CycleData[66];
-                        lon[5] = CycleData[67];
-                        lon[6] = CycleData[68];
-                        lon[7] = CycleData[69];
-                        lon[8] = CycleData[70];
-                        str = "";
-                        for (int i : lon) {
-                            str += Character.toString((char) i);
-
-                        }
-                        String carLon;
-                        if (!str.equals("000000000")) {
-                            carLon = parserLonAndLat(str);
-                        } else {
-                            carLon = str;
-                        }
-                        // 차량 위치 - 경도
-                        mCarLonText = carLon;
-                        /////////////////////////////////////////
-                        int[] lat = new int[9];
-                        lat[0] = CycleData[71];
-                        lat[1] = CycleData[72];
-                        lat[2] = CycleData[73];
-                        lat[3] = CycleData[74];
-                        lat[4] = CycleData[75];
-                        lat[5] = CycleData[76];
-                        lat[6] = CycleData[77];
-                        lat[7] = CycleData[78];
-                        lat[8] = CycleData[79];
-                        str = "";
-                        for (int i : lat) {
-                            str += Character.toString((char) i);
-
-                        }
-                        String carLat;
-                        if (!str.equals("000000000")) {
-                            carLat = parserLonAndLat(str);
-                        } else {
-                            carLat = str;
-                        }
-                        // 차량 위치 - 위도
-                        mCarLatText = carLat;
-                        /////////////////////////////////////////
-                        int[] gps = new int[3];
-                        gps[0] = CycleData[80];
-                        gps[1] = CycleData[81];
-                        gps[2] = CycleData[82];
-
-                        str = "";
-                        for (int i : gps) {
-                            str += Character.toString((char) i);
-
-                        }
-
-                        //차량 위치 gps 방위각
-                        String carAzimuthText = str;
-                        /////////////////////////////////////////
-                        String carSleepText = "0";
-
-                        if (!carSpeedText.equals("000")) {  //속도 0이 아닐때
-                            int[] sleep = new int[2];
-                            sleep[0] = CycleData[149];
-                            sleep[1] = CycleData[150];
-
-                            str = "";
-                            for (int i : sleep) {
-                                str += Character.toString((char) i);
-
-                            }
-
-                            if (CycleData[149] != 0x20 && CycleData[150] != 0x20) {  //이벤트 발생
+                        if (CycleData[149] != 0x20 && CycleData[150] != 0x20) {  //이벤트 발생
 //                        Log.d(TAG, "dataParsing !=: " + str);
 
-                                switch (str) {
-                                    case "16":  //전방 미주시
+                            switch (str) {
+                                case "16":  //전방 미주시
 
-                                        break;
-                                    case "17":  //졸음 1
-                                        carSleepText = "1";
-                                        Log.d(TAG, "dataParsing: 졸음");
-                                        break;
-                                    case "18":  //졸음 2
-                                        carSleepText = "1";
-                                        Log.d(TAG, "dataParsing: 졸음");
-                                        break;
-                                    case "19":  //이탈
+                                    break;
+                                case "17":  //졸음 1
+                                    carSleepText = "1";
+                                    Log.d(TAG, "dataParsing: 졸음");
+                                    break;
+                                case "18":  //졸음 2
+                                    carSleepText = "1";
+                                    Log.d(TAG, "dataParsing: 졸음");
+                                    break;
+                                case "19":  //이탈
 
-                                        break;
-                                }
-                            } else {
-                                carSleepText = "0";
-//                        Log.d(TAG, "dataParsing ==: " + str);
+                                    break;
                             }
                         } else {
                             carSleepText = "0";
+//                        Log.d(TAG, "dataParsing ==: " + str);
                         }
-
-                        //////////////////////////////////////
-                        //기기 상태
-                        int[] dtgDeviceState = new int[2];
-
-                        dtgDeviceState[0] = CycleData[93];
-                        dtgDeviceState[1] = CycleData[94];
-
-
-                        str = "";
-                        for (int i : dtgDeviceState) {
-                            str += Character.toString((char) i);
-
-                        }
-
-                        String dtgDeviceStateText = str;
-
-                        ////////////////////////////////////////////////
-                        //시동 상태
-                        int[] carBootState = new int[1];
-
-                        carBootState[0] = CycleData[95];
-
-                        str = "";
-                        for (int i : carBootState) {
-                            str += Character.toString((char) i);
-
-                        }
-
-                        String carBootStateText = str;
-
-                        ////////////////////////////////////////////////
-
-                        if (!isDTGSerialNumber) { //저장된 시리얼번호 없을때만
-
-                            int[] dtgSerialNumber = new int[14];
-                            int dtgSerialNumberIndex = 96; // CycleData의 배열의 자리
-                            for (int i = 0; i < dtgSerialNumber.length; i++) {
-                                dtgSerialNumber[i] = CycleData[dtgSerialNumberIndex];
-                                dtgSerialNumberIndex++;
-                            }
-
-                            str = "";
-                            for (int i : dtgSerialNumber) {
-                                str += Character.toString((char) i);
-
-                            }
-                            mTinySharedPreference.putString(DTG_SERIAL_NUMBER, str);  //쉐어드에 시리얼번호 넣고
-
-                            mDTGSerialNumber = str;  //변수에 시리얼번호 입력
-                            isDTGSerialNumber = true;  //시리얼번호를 쉐어드에 넣었으니 다시 안넣어도 되니 true로 바꿔서 이 if문 다시 안나타게 하기
-
-                        }
-
-                        mDTGInfo = new DTGInfo(carDateText, carTotalDistText, carDailyDistText, carSpeedText, carEngineRpmText, carBreakText, mCarLatText, mCarLonText, carAzimuthText, carSleepText, dtgDeviceStateText, carBootStateText);
+                    } else {
+                        carSleepText = "0";
                     }
+
+                    //////////////////////////////////////
+                    //기기 상태
+                    int[] dtgDeviceState = new int[2];
+
+                    dtgDeviceState[0] = CycleData[93];
+                    dtgDeviceState[1] = CycleData[94];
+
+
+                    str = "";
+                    for (int i : dtgDeviceState) {
+                        str += Character.toString((char) i);
+
+                    }
+
+                    String dtgDeviceStateText = str;
+
+                    ////////////////////////////////////////////////
+                    //시동 상태
+                    int[] carBootState = new int[1];
+
+                    carBootState[0] = CycleData[95];
+
+                    str = "";
+                    for (int i : carBootState) {
+                        str += Character.toString((char) i);
+
+                    }
+
+                    String carBootStateText = str;
+
+                    ////////////////////////////////////////////////
+
+                    if (!isDTGSerialNumber) { //저장된 시리얼번호 없을때만
+
+                        int[] dtgSerialNumber = new int[14];
+                        int dtgSerialNumberIndex = 96; // CycleData의 배열의 자리
+                        for (int i = 0; i < dtgSerialNumber.length; i++) {
+                            dtgSerialNumber[i] = CycleData[dtgSerialNumberIndex];
+                            dtgSerialNumberIndex++;
+                        }
+
+                        str = "";
+                        for (int i : dtgSerialNumber) {
+                            str += Character.toString((char) i);
+
+                        }
+                        Log.d(TAG, "mDTGBasicData: isDTGSerialNumber 값 들어감");
+                        mTinySharedPreference.putObject(DTG_BASIC_DATA, new DTGBasicData(mBleDevice, str));  //쉐어드에 시리얼번호 넣고
+
+
+                        mDTGSerialNumber = str;  //변수에 시리얼번호 입력
+                        isDTGSerialNumber = true;  //시리얼번호를 쉐어드에 넣었으니 다시 안넣어도 되니 true로 바꿔서 이 if문 다시 안나타게 하기
+
+                    }
+
+                    mDTGInfo = new DTGInfo(carDateText, carTotalDistText, carDailyDistText, carSpeedText, carEngineRpmText, carBreakText, mCarLatText, mCarLonText, carAzimuthText, carSleepText, dtgDeviceStateText, carBootStateText);
+//                    }
 //
                     ////////////////////////////////////////////////
 
