@@ -11,6 +11,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.database.Cursor;
+import android.location.Location;
+import android.location.LocationManager;
 import android.net.ConnectivityManager;
 import android.os.Build;
 import android.os.Environment;
@@ -65,6 +67,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import io.socket.client.IO;
 import io.socket.client.Socket;
@@ -154,6 +157,12 @@ public class MainService extends Service {
      * 블루투스 켜기 변수
      */
     private boolean isEnableBle;
+
+    /**
+     * dtg gps 데이터 값 - 거리 측정해서 위치 데이터 보내는 주기 설정을 위함
+     */
+    private Location mCurrentLocation = new Location("cur");
+    private Location mPreviousLocation;
 
 
     /**
@@ -363,6 +372,10 @@ public class MainService extends Service {
         return START_STICKY;
     }
 
+    /**
+     * 블루투스 안 켜져있으면 켜고 스캔 또는 블루투스 연결하기
+     * @param isStartScan
+     */
     public void checkEnableBluetooth(final boolean isStartScan) {
         Thread thread = new Thread(new Runnable() {
             @Override
@@ -437,8 +450,9 @@ public class MainService extends Service {
     private void setScanRule(boolean isBleDevice) {
 
         if (isBleDevice) {
+
             BleScanRuleConfig scanRuleConfig = new BleScanRuleConfig.Builder()
-//                .setServiceUuids(serviceUuids)      // 只扫描指定的服务的设备，可选
+//                .setServiceUuids(UUID_SERVICE)      // 只扫描指定的服务的设备，可选
                     .setDeviceName(true, DEVICE_NAME)   // 只扫描指定广播名的设备，可选
                     .setDeviceMac(mBleDevice.getMac())  // 只扫描指定mac的设备，可选  //BLE주소값 있으면 설정
                     .setAutoConnect(true)      // 连接时的autoConnect参数，可选，默认false
@@ -468,17 +482,19 @@ public class MainService extends Service {
             @Override
             public void onLeScan(final BleDevice bleDevice) {
                 Log.d(TAG, "onLeScan: ");
-                if (!isDiscoverBle) {
-                    if (bleDevice.getName() != null) {
-                        if (bleDevice.getName().equals(DEVICE_NAME)) {
-                            Log.d(TAG, "onLeScan: bleDevice.getMac().equals(DEVICE_NAME)");
+
+                if (bleDevice.getName() != null) {
+                    if (bleDevice.getName().equals(DEVICE_NAME)) {
+                        if (!isDiscoverBle) {  //BLE가 발견됐으면 TRUE로 바꿔서 스캔 종료 메소드 콜백 됐을때 또 스캔 되지 않게 하기
+                            isDiscoverBle = true;
+                            BleManager.getInstance().cancelScan();
+
                             if (!isBleDevice) { //bledevice 정보 없으면 저장
                                 Log.d(TAG, "mDTGBasicData: isBleDevice값들어감");
                                 mTinySharedPreference.putObject(DTG_BASIC_DATA, new DTGBasicData(bleDevice, mDTGSerialNumber));
                                 mBleDevice = bleDevice;
                             }
-                            isDiscoverBle = true;
-                            BleManager.getInstance().cancelScan();
+
                             Handler handler = new Handler(Looper.getMainLooper());
                             handler.post(new Runnable() {
                                 @Override
@@ -985,11 +1001,8 @@ public class MainService extends Service {
      */
     public void uploadFileToServer(String folderPath) {
 
-        isSentDTGData = true;
-
         final ArrayList<FileRequestBody> mFilePartArrayList = new ArrayList<>(); //서버로 보낼 파일 리스트
         final File files = new File(folderPath);
-
 
         files.listFiles(new FilenameFilter() {
             @Override
@@ -1243,20 +1256,19 @@ public class MainService extends Service {
                     }
 
                     String carSpeedText = str;
-//                    if (!carSpeedText.equals("000")) { //속도가 0일때는 나머지 데이터를 저장하지않는다
                     //차량 속도
 
-                    mCommon.MeasureDistance(carSpeedText);
-                    double currentDistance = mCommon.MeasureDistance(carSpeedText);
-//                    Log.d(TAG, "dataParsing: " + currentDistance);
+//                    mCommon.MeasureDistance(carSpeedText);
+//                    double currentDistance = mCommon.MeasureDistance(carSpeedText);
+////                    Log.d(TAG, "dataParsing: " + currentDistance);
 
-                    mTotalDistance += currentDistance;
-
-                    if (mTotalDistance > 15) {
-                        setSendLocationToServer();
-//                        Log.d(TAG, "dataParsing: " + mTotalDistance + "서버로 전송");
-                        mTotalDistance = 0;
-                    }
+//                    mTotalDistance += currentDistance;
+//
+//                    if (mTotalDistance > 15) {
+//                        setSendLocationToServer();
+////                        Log.d(TAG, "dataParsing: " + mTotalDistance + "서버로 전송");
+//                        mTotalDistance = 0;
+//                    }
 
                     /////////////////////////////////////////
 
@@ -1359,6 +1371,7 @@ public class MainService extends Service {
                     }
                     // 차량 위치 - 경도
                     mCarLonText = carLon;
+
                     /////////////////////////////////////////
                     int[] lat = new int[9];
                     lat[0] = CycleData[71];
@@ -1383,6 +1396,11 @@ public class MainService extends Service {
                     }
                     // 차량 위치 - 위도
                     mCarLatText = carLat;
+
+                    if (!carSpeedText.equals("000")) {
+                        sendDataAfterDistanceComparison();
+                    }
+
                     /////////////////////////////////////////
                     int[] gps = new int[3];
                     gps[0] = CycleData[80];
@@ -1613,6 +1631,56 @@ public class MainService extends Service {
 
 //        Log.d(TAG, "dataParsing: " + finalText);
         return finalText;
+    }
+
+    /**
+     * 거리 비교 후 데이터 보내기
+     */
+    public void sendDataAfterDistanceComparison() {
+
+        String typeCheckLat = mCarLatText.replace(".", "");
+        String typeCheckLon = mCarLonText.replace(".", "");
+
+
+        Log.d(TAG, "sendDataAfterDistanceComparison: " + typeCheckLat + typeCheckLon);
+        if (isStringDouble(typeCheckLat, typeCheckLon)) {
+
+            if (mPreviousLocation != null) {
+                //지금데이터 위치데이터에 넣고
+                mCurrentLocation.setLatitude(Double.parseDouble(mCarLatText));
+                mCurrentLocation.setLongitude(Double.parseDouble(mCarLonText));
+
+                double currentDistance = mPreviousLocation.distanceTo(mCurrentLocation);  //전, 현 데이터 비교
+                Log.d(TAG, "sendDataAfterDistanceComparison: " + currentDistance);
+
+                mTotalDistance += currentDistance; // 토탈 거리에 달라진값 더하고
+
+                if (mTotalDistance > 15) {  //15m 이상이면 서버로 현 위치 데이터 보냄
+                    setSendLocationToServer();
+//                    Log.d(TAG, "dataParsing: " + mTotalDistance + "서버로 전송");
+                    mTotalDistance = 0;
+                }
+
+                mPreviousLocation = mCurrentLocation; // 비교 후 현재 데이터 전데이터에 넣기
+
+            } else {
+                mPreviousLocation = new Location("pre");
+                Log.d(TAG, "sendDataAfterDistanceComparison: " + mCarLatText);
+                mPreviousLocation.setLatitude(Double.parseDouble(mCarLatText));
+                mPreviousLocation.setLongitude(Double.parseDouble(mCarLonText));
+            }
+        }
+
+    }
+
+    public boolean isStringDouble(String s1, String s2) {
+        try {
+            Double.parseDouble(s1);
+            Double.parseDouble(s2);
+            return true;
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
 }
 

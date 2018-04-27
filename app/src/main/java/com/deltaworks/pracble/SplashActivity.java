@@ -19,6 +19,7 @@ import android.view.View;
 import android.widget.Toast;
 
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.engine.DiskCacheStrategy;
 import com.bumptech.glide.load.resource.drawable.GlideDrawable;
 import com.bumptech.glide.request.RequestListener;
 import com.bumptech.glide.request.target.GlideDrawableImageViewTarget;
@@ -47,6 +48,8 @@ public class SplashActivity extends AppCompatActivity {
 //
 //        Glide.with(this)
 //                .load("https://media.giphy.com/media/l4Ho7AfNzHCtwGR0s/giphy.gif")
+//                .diskCacheStrategy(DiskCacheStrategy.NONE)// 디스크 캐시 저장 off
+//                .skipMemoryCache(true) //메모리 캐시
 //                .into(gifImage);
 
         permissionCheck();
