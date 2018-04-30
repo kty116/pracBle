@@ -68,9 +68,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import io.socket.client.IO;
-import io.socket.client.Socket;
-import io.socket.emitter.Emitter;
 import okhttp3.MediaType;
 import okhttp3.RequestBody;
 import retrofit2.Call;
@@ -79,9 +76,6 @@ import retrofit2.Response;
 
 
 public class MainService extends Service {
-
-    public int priority;
-
 
     public String UUID_SERVICE = "0003cdd0-0000-1000-8000-00805f9b0131";
 
@@ -136,7 +130,7 @@ public class MainService extends Service {
     private boolean isSentLocationData = true;
     private int mIdOfLastData;
 
-    private int limitTheNumberOfFiles = 1;
+    private int limitTheNumberOfFiles = 4;
 
     /**
      * 블루투스 연결시 데이터 성공적으로 오는지 확인하는 알람 변수
@@ -199,17 +193,15 @@ public class MainService extends Service {
     /**
      * socket io
      */
-    private Socket mSocket;
-
-
-    {
-        try {
-            mSocket = IO.socket("http://서버ip:포트번호");
-        } catch (URISyntaxException e) {
-        }
-    }
-
-
+//    private Socket mSocket;
+//
+//
+//    {
+//        try {
+//            mSocket = IO.socket("http://서버ip:포트번호");
+//        } catch (URISyntaxException e) {
+//        }
+//    }
     public MainService() {
     }
 
@@ -230,11 +222,9 @@ public class MainService extends Service {
 
         /////////////////////// 서버에서 변경되는 설정값 가져오는 곳 //////////////////////
 
-        mSocket.on("받을 이벤트명", onNewMessage);  //socket io 리스너 설정
-        mSocket.connect();  //socket io 연결
+//        mSocket.on("받을 이벤트명", onNewMessage);  //socket io 리스너 설정
+//        mSocket.connect();  //socket io 연결
         ////////////////////////////////////////////////////////////////////////////////
-
-//        uploadFileToServer(mFolderPath.getAbsolutePath());
 
         mTinySharedPreference = new TinyDB(getApplicationContext());
         DTGBasicData mDTGBasicData = mTinySharedPreference.getObject(DTG_BASIC_DATA, DTGBasicData.class);
@@ -243,7 +233,7 @@ public class MainService extends Service {
 
             mDTGSerialNumber = mDTGBasicData.getDtgSerialNumber();
             mBleDevice = mDTGBasicData.getBleDevice();
-            Log.d(TAG, "mDTGSerialNumber: " + mDTGSerialNumber + mBleDevice);
+//            Log.d(TAG, "mDTGSerialNumber: " + mDTGSerialNumber + mBleDevice);
 
             if (mDTGSerialNumber != null) {  //시리얼번호가 있을때
 
@@ -260,7 +250,7 @@ public class MainService extends Service {
             }
 
         } else {
-            Log.d(TAG, "mDTGBasicData: 값 없음");
+//            Log.d(TAG, "mDTGBasicData: 값 없음");
         }
 
         //////////////////블루투스 설정//////////////////
@@ -291,7 +281,6 @@ public class MainService extends Service {
 //                    setUploadFileToServer();  //파일 업로드
                     int networkState = mCommon.checkNetwork();
                     if (networkState == 1 || networkState == 2) {  //2은 mobile 연결됐을 때
-                        Log.d(TAG, "onCreate: ");
                         uploadFileToServer(mFolderPath.getAbsolutePath());
                     }
                     mFacade.dropTable();
@@ -305,42 +294,42 @@ public class MainService extends Service {
             mFacade.createTable();
         }
 
-        int networkState = mCommon.checkNetwork();  //현재 네트워크 상태 체크
-
-        if (networkState == 1 || networkState == 2) {  //인터넷 연결 됨
-            //서버에서 로드 시간 가져오기
-            //가져온 시간 저장하기
-            getUploadTimeToServer();
-        } else {  //인터넷 연결 안됨
-            //원래 있던 시간 값 가져와서 upload_time 값 셋팅
-            SettingInfo settingInfo = mTinySharedPreference.getObject(KEY_SETTING_DATA, SettingInfo.class);
-            if (settingInfo != null) {
-                Log.d(TAG, "onCreate: " + settingInfo.getAlarmTime());
-                UPLOAD_TIME = settingInfo.getAlarmTime();
-            } else { //앱 처음 켰을때
-                mTinySharedPreference.putObject(KEY_SETTING_DATA, new SettingInfo(UPLOAD_TIME));
-            }
-        }
+//        int networkState = mCommon.checkNetwork();  //현재 네트워크 상태 체크
+//
+//        if (networkState == 1 || networkState == 2) {  //인터넷 연결 됨
+//            //서버에서 로드 시간 가져오기
+//            //가져온 시간 저장하기
+//            getUploadTimeToServer();
+//        } else {  //인터넷 연결 안됨
+//            //원래 있던 시간 값 가져와서 upload_time 값 셋팅
+//            SettingInfo settingInfo = mTinySharedPreference.getObject(KEY_SETTING_DATA, SettingInfo.class);
+//            if (settingInfo != null) {
+//                Log.d(TAG, "onCreate: " + settingInfo.getAlarmTime());
+//                UPLOAD_TIME = settingInfo.getAlarmTime();
+//            } else { //앱 처음 켰을때
+//                mTinySharedPreference.putObject(KEY_SETTING_DATA, new SettingInfo(UPLOAD_TIME));
+//            }
+//        }
     }
 
-    private Emitter.Listener onNewMessage = new Emitter.Listener() {
-        @Override
-        public void call(final Object... args) {
-            JSONObject data = (JSONObject) args[0];
-            String uploadTime;
-            try {
-                uploadTime = data.getString("alarm_time");
-            } catch (JSONException e) {
-                return;
-            }
-
-            if (uploadTime != null) {
-                long lUploadTime = Long.parseLong(uploadTime);
-                mTinySharedPreference.putObject(KEY_SETTING_DATA, new SettingInfo(lUploadTime));
-                UPLOAD_TIME = lUploadTime;
-            }
-        }
-    };
+//    private Emitter.Listener onNewMessage = new Emitter.Listener() {
+//        @Override
+//        public void call(final Object... args) {
+//            JSONObject data = (JSONObject) args[0];
+//            String uploadTime;
+//            try {
+//                uploadTime = data.getString("alarm_time");
+//            } catch (JSONException e) {
+//                return;
+//            }
+//
+//            if (uploadTime != null) {
+//                long lUploadTime = Long.parseLong(uploadTime);
+//                mTinySharedPreference.putObject(KEY_SETTING_DATA, new SettingInfo(lUploadTime));
+//                UPLOAD_TIME = lUploadTime;
+//            }
+//        }
+//    };
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
@@ -520,14 +509,14 @@ public class MainService extends Service {
 
                     } catch (InterruptedException e) {
                     }
-                    tryStartScan();
+                    startScan();
 
                 }
             }
         });
     }
 
-    private void tryStartScan(){
+    private void tryStartScan() {
         if (!BleManager.getInstance().isBlueEnable()) {  //블루투스 안 켜짐
             isEnableBle = false;
             createNoti(true, "블루투스 켜는 중");
@@ -586,10 +575,10 @@ public class MainService extends Service {
 //                    BleManager.getInstance().disconnect(device);
 //                }
                 if (!isConnectedFinish) {  //진짜 연결 종료하려면 true
-                BleManager.getInstance().removeNotifyCallback(mCurrentBleDevice, UUID_CHAR_READ);
-                BleManager.getInstance().removeConnectGattCallback(mCurrentBleDevice);
+                    BleManager.getInstance().removeNotifyCallback(mCurrentBleDevice, UUID_CHAR_READ);
+                    BleManager.getInstance().removeConnectGattCallback(mCurrentBleDevice);
 
-                createNoti(false, "블루투스 기기와 연결 실패");
+                    createNoti(false, "블루투스 기기와 연결 실패");
 //                EventBus.getDefault().post(new BleStateEvent("블루투스 기기와 연결 실패"));
 
 //                if (!isCheckForChangedData) {
@@ -804,6 +793,10 @@ public class MainService extends Service {
     public void onDestroy() {
         super.onDestroy();
         Log.d(TAG, "onDestroy: ");
+
+        isDiscoverBle = true;
+
+        //계속 스캔중이면 스캔 끝내야하니까
         if (isStartedDataAlarm) {  //알람 등록 됐으면 true
             setDataAlarm(false);  //알람 해제
         }
@@ -826,8 +819,8 @@ public class MainService extends Service {
         }
         BleManager.getInstance().destroy();
         unregisterReceiver(mInternetReceiver);
-        mSocket.disconnect();  //socket io 연결 해제
-        mSocket.off("받을 이벤트명", onNewMessage);  //socket io 리스너 없애기
+//        mSocket.disconnect();  //socket io 연결 해제
+//        mSocket.off("받을 이벤트명", onNewMessage);  //socket io 리스너 없애기
         EventBus.getDefault().unregister(this);
         stopForeground(true);  //노티피케이션 지우기
     }
@@ -926,20 +919,8 @@ public class MainService extends Service {
                     break;
                 case ACTION_ALARM_DTG_DATA:
                     Log.d(TAG, "onEvent: DATA 알람 옴");
-                    //이건 주기마다 파일을 만들어야 하기때문에 데이터가 보내지지않아도 알람 이벤트가 오면 알람을 재등록 하게 한다.
 
-
-                    /////////////////////////압축 파일 만들기/////////////////////////////////////
-//                    if (mCommon.checkNetwork() == 1) { //와이파이 연결 되있을때 파일 만들기
-//                        Cursor dtgData = mFacade.queryDTGAllData();
-//                        if (dtgData != null) {  //data에 값이 있을때
-//                            if (dbDataToFile()) {  //압축 파일 만들고 기존 파일 삭제 성공일때
                     setUploadFileToServer();  //파일 업로드
-//                            }
-//                        }
-//                    } else {
-//                        와이파이 연결 안됨
-//                    }
                     break;
 
 //                case ACTION_ALARM_CHECK_FOR_CHANGED_DATA:
@@ -1095,13 +1076,12 @@ public class MainService extends Service {
 //                    Log.d(TAG, "파일 올리기 실패: " + t.toString());
 //                    Log.d(TAG, call.toString());
                     isSentDTGData = true;
-                    priority = 1;
                     Crashlytics.log("파일 올리기 실패" + t.toString());
                 }
 
             });
         } else {
-            Log.d(TAG, "uploadFileToServer: 파일 없음");
+//            Log.d(TAG, "uploadFileToServer: 파일 없음");
             isSentDTGData = true;  //업로드 성공시 true 바뀐다
         }
     }
