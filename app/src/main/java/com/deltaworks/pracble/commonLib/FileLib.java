@@ -63,10 +63,10 @@ public class FileLib {
 
         } catch (IOException e) {
         }
-        Log.d("dd", "makeZipFile: 끝");
+//        Log.d("dd", "makeZipFile: 끝");
         context.sendBroadcast(new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE,
                 Uri.parse("file://" + zipFilePath)));
-        Log.d(TAG, "makeZipFile: " + zipFile.length());
+//        Log.d(TAG, "makeZipFile: " + zipFile.length());
         if (zipFile.length() > 0) {  //값 있음
             return true;
         } else {
@@ -101,7 +101,7 @@ public class FileLib {
         try {
             FileOutputStream out = new FileOutputStream(textFile);
             out.write(fileContent.getBytes());
-            Log.d("----------", "getAlbumStorageDir: " + textFilePath);
+//            Log.d("----------", "getAlbumStorageDir: " + textFilePath);
             out.flush();
             out.close();
 

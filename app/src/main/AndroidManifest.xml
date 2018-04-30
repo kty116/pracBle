@@ -27,6 +27,8 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
+
+        <meta-data android:name="firebase_crashlytics_collection_enabled" android:value="false" />
         <activity android:name=".MainActivity"
             android:launchMode="singleInstance"/>
 
@@ -48,7 +50,6 @@
             <intent-filter>
                 <action android:name="action_alarm_dtg_data" />
                 <action android:name="action_alarm_dtg_location" />
-                <action android:name="action_alarm_check_for_changed_data" />
             </intent-filter>
         </receiver>
     </application>

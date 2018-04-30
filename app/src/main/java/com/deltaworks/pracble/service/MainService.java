@@ -12,7 +12,6 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.database.Cursor;
 import android.location.Location;
-import android.location.LocationManager;
 import android.net.ConnectivityManager;
 import android.os.Build;
 import android.os.Environment;
@@ -31,6 +30,7 @@ import com.clj.fastble.callback.BleWriteCallback;
 import com.clj.fastble.data.BleDevice;
 import com.clj.fastble.exception.BleException;
 import com.clj.fastble.scan.BleScanRuleConfig;
+import com.crashlytics.android.Crashlytics;
 import com.deltaworks.pracble.MainActivity;
 import com.deltaworks.pracble.R;
 import com.deltaworks.pracble.commonLib.CommonCollection;
@@ -67,7 +67,6 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 import io.socket.client.IO;
 import io.socket.client.Socket;
@@ -81,14 +80,17 @@ import retrofit2.Response;
 
 public class MainService extends Service {
 
+    public int priority;
+
+
     public String UUID_SERVICE = "0003cdd0-0000-1000-8000-00805f9b0131";
 
     public String UUID_CHAR_READ = "0003cdd1-0000-1000-8000-00805f9b0131";
     public String UUID_CHAR_WRITE = "0003cdd2-0000-1000-8000-00805f9b0131";
 
-    public String UUID_DESCRIPTOR = "00002902-0000-1000-8000-00805f9b34fb";
-    public String UUID_DESCRIPTOR_WRITE = "00002902-0000-1000-8000-00805f9b34fb";
-    public String UUID_DESCRIPTOR_READ = "00002902-0000-1000-8000-00805f9b34fb";
+//    public String UUID_DESCRIPTOR = "00002902-0000-1000-8000-00805f9b34fb";
+//    public String UUID_DESCRIPTOR_WRITE = "00002902-0000-1000-8000-00805f9b34fb";
+//    public String UUID_DESCRIPTOR_READ = "00002902-0000-1000-8000-00805f9b34fb";
 
     private static int TIME_OUT_SCAN = 5000;
 
@@ -116,9 +118,7 @@ public class MainService extends Service {
     private boolean isDTGSerialNumber;
     private String mDTGSerialNumber;
 
-    public static final String DTG_SERIAL_NUMBER = "dtg_serial_number";  //dtg 시리얼 번호
     public static final String DTG_BASIC_DATA = "dtg_basic_data";  //dtg 시리얼 번호
-    public static final String DTG_BLE_MAC = "dtg_ble_mac";  //dtg ble 주소값
     // TODO: 2018-04-17 시리얼부분 가져와서 한번만 저장하게 셋팅
     private String mTokenNumber = "true";
 
@@ -141,7 +141,7 @@ public class MainService extends Service {
     /**
      * 블루투스 연결시 데이터 성공적으로 오는지 확인하는 알람 변수
      */
-    public static final String ACTION_ALARM_CHECK_FOR_CHANGED_DATA = "action_alarm_check_for_changed_data";
+//    public static final String ACTION_ALARM_CHECK_FOR_CHANGED_DATA = "action_alarm_check_for_changed_data";
     private long CHECK_FOR_CHANGED_DATA_TIME = 3000;  // notify된 데이터가 들어오는지 확인 주기
 
     private boolean isCheckForChangedData = false;
@@ -193,6 +193,8 @@ public class MainService extends Service {
     private FileLib mFileLib;
 
     private BleDevice mCurrentBleDevice = null;  //현재 연결된 블루투스값
+
+    private boolean isConnectedFinish = false;
 
     /**
      * socket io
@@ -246,6 +248,7 @@ public class MainService extends Service {
             if (mDTGSerialNumber != null) {  //시리얼번호가 있을때
 
                 isDTGSerialNumber = true;
+                Crashlytics.setUserIdentifier(mDTGSerialNumber);  //어떤 사용자에게 특정 비정상 종료가 발생했는지
             } else {
                 isDTGSerialNumber = false;
             }
@@ -350,14 +353,7 @@ public class MainService extends Service {
 
                         Log.d(TAG, "onCreate: getAdapter");
 
-                        if (!BleManager.getInstance().isBlueEnable()) {  //블루투스 안 켜짐
-                            isEnableBle = false;
-                            createNoti(true, "블루투스 켜는 중");
-                            BleManager.getInstance().enableBluetooth();
-                            checkEnableBluetooth(true);
-                        } else {
-                            startScan();
-                        }
+                        tryStartScan();
 
                         break;
                     case ACTION_CLICK_NOTIBAR: //노티 클릭
@@ -374,6 +370,7 @@ public class MainService extends Service {
 
     /**
      * 블루투스 안 켜져있으면 켜고 스캔 또는 블루투스 연결하기
+     *
      * @param isStartScan
      */
     public void checkEnableBluetooth(final boolean isStartScan) {
@@ -519,14 +516,26 @@ public class MainService extends Service {
 
                     try {
                         Thread.sleep(2000);
-                        EventBus.getDefault().post(new ToastEvent("근처에 기기가 검색이 되지 않습니다. 기기를 종료 후 다시 켜주세요"));
+                        EventBus.getDefault().post(new ToastEvent("근처에 기기가 검색이 되지 않습니다."));
 
                     } catch (InterruptedException e) {
                     }
-                    startScan();
+                    tryStartScan();
+
                 }
             }
         });
+    }
+
+    private void tryStartScan(){
+        if (!BleManager.getInstance().isBlueEnable()) {  //블루투스 안 켜짐
+            isEnableBle = false;
+            createNoti(true, "블루투스 켜는 중");
+            BleManager.getInstance().enableBluetooth();
+            checkEnableBluetooth(true);
+        } else {
+            startScan();
+        }
     }
 
     private void connect(final BleDevice bleDevice) {
@@ -573,10 +582,10 @@ public class MainService extends Service {
 //                    mCurrentBleDevice = null;
 //                }
 
-                if (BleManager.getInstance().isConnected(device)) {
-                    BleManager.getInstance().disconnect(device);
-                }
-
+//                if (BleManager.getInstance().isConnected(device)) {
+//                    BleManager.getInstance().disconnect(device);
+//                }
+                if (!isConnectedFinish) {  //진짜 연결 종료하려면 true
                 BleManager.getInstance().removeNotifyCallback(mCurrentBleDevice, UUID_CHAR_READ);
                 BleManager.getInstance().removeConnectGattCallback(mCurrentBleDevice);
 
@@ -584,28 +593,31 @@ public class MainService extends Service {
 //                EventBus.getDefault().post(new BleStateEvent("블루투스 기기와 연결 실패"));
 
 //                if (!isCheckForChangedData) {
-                try {
-                    Thread.sleep(2000);
+
+
+                    try {
+                        Thread.sleep(2000);
 //                        isDiscoverBle = false;
-                    if (!BleManager.getInstance().isBlueEnable()) {  //블루투스 안 켜짐
-                        isEnableBle = false;
-                        createNoti(true, "블루투스 켜는 중");
-                        BleManager.getInstance().enableBluetooth();
-                        checkEnableBluetooth(false);
-                    } else {
-                        Handler handler = new Handler(Looper.getMainLooper());
-                        handler.post(new Runnable() {
-                            @Override
-                            public void run() {
-                                connect(bleDevice);
-                                Log.d(TAG, "run: " + bleDevice.getMac());
-                            }
-                        });
-                    }
+                        if (!BleManager.getInstance().isBlueEnable()) {  //블루투스 안 켜짐
+                            isEnableBle = false;
+                            createNoti(true, "블루투스 켜는 중");
+                            BleManager.getInstance().enableBluetooth();
+                            checkEnableBluetooth(false);
+                        } else {
+                            Handler handler = new Handler(Looper.getMainLooper());
+                            handler.post(new Runnable() {
+                                @Override
+                                public void run() {
+                                    connect(bleDevice);
+                                    Log.d(TAG, "run: " + bleDevice.getMac());
+                                }
+                            });
+                        }
 //                        sendNotiAction(ACTION_START_CONNECT);
-                } catch (InterruptedException e) {
-                }
+                    } catch (InterruptedException e) {
+                    }
 //                }
+                }
             }
         });
     }
@@ -738,7 +750,7 @@ public class MainService extends Service {
      */
 
     public boolean dbDataToFile() {
-        Log.d(TAG, "dbDataToFile: 시작");
+//        Log.d(TAG, "dbDataToFile: 시작");
         ArrayList<DTGInfo> mDTGInfoList = new ArrayList<>();
         Cursor dtgAllDataCursor = mFacade.queryDTGAllData();  //데이터 전체 값
         if (dtgAllDataCursor.moveToFirst()) {
@@ -762,18 +774,18 @@ public class MainService extends Service {
                 mDTGInfoList.add(new DTGInfo(date, totalDist, dailyDist, carSpeed, engineRpm, carBreak, carLat, carLon, carAzimuth, carSleep, dtgDeviceState, carBoot));
                 if (!dtgAllDataCursor.moveToNext()) {
                     mIdOfLastData = id;
-                    Log.d(TAG, "dbDataToFile: " + mIdOfLastData);
+//                    Log.d(TAG, "dbDataToFile: " + mIdOfLastData);
                     break;
                 }
             }
         }
         Log.d(TAG, "파일 만든 마지막 id: " + mIdOfLastData);
-        Log.d(TAG, "dbDataToFile: mDTGInfoList.size() " + mDTGInfoList.size());
+//        Log.d(TAG, "dbDataToFile: mDTGInfoList.size() " + mDTGInfoList.size());
         dtgAllDataCursor.close();
         Gson gson = new Gson();
         String jsonPlace = gson.toJson(mDTGInfoList);
 
-        Log.d(TAG, "dbDataToFile: " + jsonPlace);
+//        Log.d(TAG, "dbDataToFile: " + jsonPlace);
         String dateFormat = new SimpleDateFormat("yyMMddHHmmss").format(new Date());
         String textFileName = mDTGSerialNumber + "_" + dateFormat;
 
@@ -799,9 +811,9 @@ public class MainService extends Service {
             setLocationAlarm(false);  //알람 해제
         }
 
-        if (isStartedCheckForChangedDataAlarm) {
-            setCheckForChangeDataAlarm(false);  //알람 해제
-        }
+//        if (isStartedCheckForChangedDataAlarm) {
+//            setCheckForChangeDataAlarm(false);  //알람 해제
+//        }
 
         if (mCurrentBleDevice != null) {
             mCurrentBleDevice = null;
@@ -809,6 +821,7 @@ public class MainService extends Service {
         }
 
         if (BleManager.getInstance().isConnected(mCurrentBleDevice)) {
+            isConnectedFinish = true;
             BleManager.getInstance().disconnect(mCurrentBleDevice);
         }
         BleManager.getInstance().destroy();
@@ -879,24 +892,24 @@ public class MainService extends Service {
         }
     }
 
-    public void setCheckForChangeDataAlarm(boolean start) {
-        Intent alarmIntent = new Intent(ACTION_ALARM_CHECK_FOR_CHANGED_DATA);
-        PendingIntent pendingIntent = PendingIntent.getBroadcast(this, 1, alarmIntent, PendingIntent.FLAG_CANCEL_CURRENT);
-        AlarmManager alarmManager = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
-        long delay = CHECK_FOR_CHANGED_DATA_TIME; //5초
-
-        if (start) {  //true면 알람 시작
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + delay, pendingIntent);
-            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-                alarmManager.setExact(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + delay, pendingIntent);
-            } else {
-                alarmManager.set(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + delay, pendingIntent);
-            }
-        } else {  //false면 알람 취소
-            alarmManager.cancel(pendingIntent);
-        }
-    }
+//    public void setCheckForChangeDataAlarm(boolean start) {
+//        Intent alarmIntent = new Intent(ACTION_ALARM_CHECK_FOR_CHANGED_DATA);
+//        PendingIntent pendingIntent = PendingIntent.getBroadcast(this, 1, alarmIntent, PendingIntent.FLAG_CANCEL_CURRENT);
+//        AlarmManager alarmManager = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
+//        long delay = CHECK_FOR_CHANGED_DATA_TIME; //5초
+//
+//        if (start) {  //true면 알람 시작
+//            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+//                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + delay, pendingIntent);
+//            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+//                alarmManager.setExact(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + delay, pendingIntent);
+//            } else {
+//                alarmManager.set(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + delay, pendingIntent);
+//            }
+//        } else {  //false면 알람 취소
+//            alarmManager.cancel(pendingIntent);
+//        }
+//    }
 
 
     @Subscribe
@@ -929,14 +942,14 @@ public class MainService extends Service {
 //                    }
                     break;
 
-                case ACTION_ALARM_CHECK_FOR_CHANGED_DATA:
-                    Log.d(TAG, "onEvent: 데이터 잘 들어오나 확인 알람");
-                    if (!isCheckForChangedData) {// false면 데이터 안들어옴
-                        isStartedCheckForChangedDataAlarm = false;
-                        if (BleManager.getInstance().isConnected(mCurrentBleDevice)) {
-                            BleManager.getInstance().disconnect(mCurrentBleDevice);
-                        }
-                    }
+//                case ACTION_ALARM_CHECK_FOR_CHANGED_DATA:
+//                    Log.d(TAG, "onEvent: 데이터 잘 들어오나 확인 알람");
+//                    if (!isCheckForChangedData) {// false면 데이터 안들어옴
+//                        isStartedCheckForChangedDataAlarm = false;
+//                        if (BleManager.getInstance().isConnected(mCurrentBleDevice)) {
+//                            BleManager.getInstance().disconnect(mCurrentBleDevice);
+//                        }
+//                    }
             }
         } else if (event instanceof StartConnectEvent) {
             Handler handler = new Handler(Looper.getMainLooper());
@@ -1011,7 +1024,7 @@ public class MainService extends Service {
                     if (name.contains(mDTGSerialNumber)) {  //이름에 mDTGSerialNumber 들어가는 파일
 
                         File file = new File(dir + "/" + name);
-                        Log.d(TAG, "accept: " + file);
+//                        Log.d(TAG, "accept: " + file);
                         RequestBody requestFile = RequestBody.create(MediaType.parse("/*"), file);
 
                         mFilePartArrayList.add(new FileRequestBody(requestFile, file.getName()));
@@ -1025,8 +1038,8 @@ public class MainService extends Service {
 //        }
 //        Log.d(TAG, "uploadFileToServer: " + partArrayList.size());
         if (mFilePartArrayList.size() != 0) {  //파일이 있으면
-            Log.d(TAG, "uploadFileToServer: 파일 있음 0아님");
-            Log.d(TAG, "setRetrofit: " + mFilePartArrayList.size());
+//            Log.d(TAG, "uploadFileToServer: 파일 있음 0아님");
+//            Log.d(TAG, "setRetrofit: " + mFilePartArrayList.size());
 
             RequestBody token = RequestBody.create(MediaType.parse("text/plain"), mTokenNumber);
             RequestBody dtgNum = RequestBody.create(MediaType.parse("text/plain"), mDTGSerialNumber);
@@ -1051,17 +1064,17 @@ public class MainService extends Service {
 
 
                     if (response.isSuccessful()) {
-                        Log.d(TAG, "파일 올리기 성공");
-                        Log.d(TAG, "json 값: " + response.body());
+//                        Log.d(TAG, "파일 올리기 성공");
+//                        Log.d(TAG, "json 값: " + response.body());
                         System.out.println(response.body());
 
                         FileInfo fileInfo = response.body();
 
                         ArrayList<String> files = fileInfo.fileName;
                         for (int i = 0; i < files.size(); i++) {
-                            Log.d(TAG, "onResponse: " + files.get(i));
+//                            Log.d(TAG, "onResponse: " + files.get(i));
                             if (mFileLib.deleteFile(files.get(i))) {
-                                Log.d(TAG, "onResponse: " + files.get(i) + "삭제됨");
+//                                Log.d(TAG, "onResponse: " + files.get(i) + "삭제됨");
                             }
                         }
 
@@ -1079,9 +1092,11 @@ public class MainService extends Service {
 
                 @Override
                 public void onFailure(Call<FileInfo> call, Throwable t) {
-                    Log.d(TAG, "파일 올리기 실패: " + t.toString());
-                    Log.d(TAG, call.toString());
+//                    Log.d(TAG, "파일 올리기 실패: " + t.toString());
+//                    Log.d(TAG, call.toString());
                     isSentDTGData = true;
+                    priority = 1;
+                    Crashlytics.log("파일 올리기 실패" + t.toString());
                 }
 
             });
@@ -1107,8 +1122,8 @@ public class MainService extends Service {
             public void onResponse(Call<ResponseInfo> call, Response<ResponseInfo> response) {
                 if (response.isSuccessful()) {
 
-                    Log.d(TAG, "sendLocationToServer: gps 데이터 전송 성공");
-                    Log.d(TAG, "json 값: " + response.body().toString());
+//                    Log.d(TAG, "sendLocationToServer: gps 데이터 전송 성공");
+//                    Log.d(TAG, "json 값: " + response.body().toString());
 
                     isSentLocationData = true;  //업로드 성공시 true 바뀐다
                 }
@@ -1117,6 +1132,7 @@ public class MainService extends Service {
             @Override
             public void onFailure(Call<ResponseInfo> call, Throwable t) {
                 Log.d(TAG, "실패" + t.toString());
+                Crashlytics.log("파일 올리기 실패" + t.toString());
 
             }
 
@@ -1509,6 +1525,8 @@ public class MainService extends Service {
                         mDTGSerialNumber = str;  //변수에 시리얼번호 입력
                         isDTGSerialNumber = true;  //시리얼번호를 쉐어드에 넣었으니 다시 안넣어도 되니 true로 바꿔서 이 if문 다시 안나타게 하기
 
+                        Crashlytics.setUserIdentifier(mDTGSerialNumber);  //어떤 사용자에게 특정 비정상 종료가 발생했는지
+
                     }
 
                     mDTGInfo = new DTGInfo(carDateText, carTotalDistText, carDailyDistText, carSpeedText, carEngineRpmText, carBreakText, mCarLatText, mCarLonText, carAzimuthText, carSleepText, dtgDeviceStateText, carBootStateText);
@@ -1642,7 +1660,7 @@ public class MainService extends Service {
         String typeCheckLon = mCarLonText.replace(".", "");
 
 
-        Log.d(TAG, "sendDataAfterDistanceComparison: " + typeCheckLat + typeCheckLon);
+//        Log.d(TAG, "sendDataAfterDistanceComparison: " + typeCheckLat + typeCheckLon);
         if (isStringDouble(typeCheckLat, typeCheckLon)) {
 
             if (mPreviousLocation != null) {
@@ -1651,7 +1669,7 @@ public class MainService extends Service {
                 mCurrentLocation.setLongitude(Double.parseDouble(mCarLonText));
 
                 double currentDistance = mPreviousLocation.distanceTo(mCurrentLocation);  //전, 현 데이터 비교
-                Log.d(TAG, "sendDataAfterDistanceComparison: " + currentDistance);
+//                Log.d(TAG, "sendDataAfterDistanceComparison: " + currentDistance);
 
                 mTotalDistance += currentDistance; // 토탈 거리에 달라진값 더하고
 
@@ -1665,7 +1683,7 @@ public class MainService extends Service {
 
             } else {
                 mPreviousLocation = new Location("pre");
-                Log.d(TAG, "sendDataAfterDistanceComparison: " + mCarLatText);
+//                Log.d(TAG, "sendDataAfterDistanceComparison: " + mCarLatText);
                 mPreviousLocation.setLatitude(Double.parseDouble(mCarLatText));
                 mPreviousLocation.setLongitude(Double.parseDouble(mCarLonText));
             }

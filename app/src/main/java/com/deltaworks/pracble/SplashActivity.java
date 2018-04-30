@@ -3,6 +3,7 @@ package com.deltaworks.pracble;
 import android.Manifest;
 import android.app.ActivityOptions;
 import android.content.Intent;
+import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.databinding.DataBindingUtil;
 import android.graphics.drawable.Drawable;
@@ -24,6 +25,7 @@ import com.bumptech.glide.load.resource.drawable.GlideDrawable;
 import com.bumptech.glide.request.RequestListener;
 import com.bumptech.glide.request.target.GlideDrawableImageViewTarget;
 import com.bumptech.glide.request.target.Target;
+import com.crashlytics.android.Crashlytics;
 import com.deltaworks.pracble.databinding.ActivitySplashBinding;
 import com.gun0912.tedpermission.PermissionListener;
 import com.gun0912.tedpermission.TedPermission;
@@ -32,6 +34,8 @@ import java.util.ArrayList;
 
 import javax.annotation.Nullable;
 import javax.sql.DataSource;
+
+import io.fabric.sdk.android.Fabric;
 
 public class SplashActivity extends AppCompatActivity {
 
@@ -42,15 +46,19 @@ public class SplashActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+
         binding = DataBindingUtil.setContentView(this, R.layout.activity_splash);
 
-//        GlideDrawableImageViewTarget gifImage = new GlideDrawableImageViewTarget(binding.progressImage);
-//
-//        Glide.with(this)
-//                .load("https://media.giphy.com/media/l4Ho7AfNzHCtwGR0s/giphy.gif")
+        Fabric.with(this, new Crashlytics());
+
+        GlideDrawableImageViewTarget gifImage = new GlideDrawableImageViewTarget(binding.progressImage);
+
+        Glide.with(this)
+                .load("https://media.giphy.com/media/l4Ho7AfNzHCtwGR0s/giphy.gif")
 //                .diskCacheStrategy(DiskCacheStrategy.NONE)// 디스크 캐시 저장 off
 //                .skipMemoryCache(true) //메모리 캐시
-//                .into(gifImage);
+                .into(gifImage);
 
         permissionCheck();
 

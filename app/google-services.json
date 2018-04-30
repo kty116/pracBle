@@ -1,0 +1,42 @@
+{
+  "project_info": {
+    "project_number": "850266229037",
+    "firebase_url": "https://bletest-e7c7a.firebaseio.com",
+    "project_id": "bletest-e7c7a",
+    "storage_bucket": "bletest-e7c7a.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:850266229037:android:524d6630b27157a7",
+        "android_client_info": {
+          "package_name": "com.deltaworks.pracble"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "850266229037-l3jn955iddnlq5fg2enimpdgm5kepfi8.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCHKF9MIKwzzuodQV-aU2_QYIDJbj69t8g"
+        }
+      ],
+      "services": {
+        "analytics_service": {
+          "status": 1
+        },
+        "appinvite_service": {
+          "status": 1,
+          "other_platform_oauth_client": []
+        },
+        "ads_service": {
+          "status": 2
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
