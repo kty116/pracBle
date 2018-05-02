@@ -1,5 +1,7 @@
 package com.deltaworks.pracble.model;
 
+import android.bluetooth.BluetoothDevice;
+
 import com.clj.fastble.data.BleDevice;
 
 /**
@@ -7,19 +9,20 @@ import com.clj.fastble.data.BleDevice;
  */
 
 public class DTGBasicData {
-    private BleDevice bleDevice;
+    private BluetoothDevice bleDevice;
     private String dtgSerialNumber;
 
-    public DTGBasicData(BleDevice bleDevice, String dtgSerialNumber) {
+    public DTGBasicData(BluetoothDevice bleDevice, String dtgSerialNumber) {
         this.bleDevice = bleDevice;
         this.dtgSerialNumber = dtgSerialNumber;
     }
 
-    public BleDevice getBleDevice() {
+
+    public BluetoothDevice getBleDevice() {
         return bleDevice;
     }
 
-    public void setBleDevice(BleDevice bleDevice) {
+    public void setBleDevice(BluetoothDevice bleDevice) {
         this.bleDevice = bleDevice;
     }
 

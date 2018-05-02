@@ -5,7 +5,10 @@ import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGatt;
+import android.bluetooth.BluetoothManager;
 import android.content.BroadcastReceiver;
 import android.content.ContentValues;
 import android.content.Context;
@@ -65,6 +68,7 @@ import java.net.URISyntaxException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.EventListener;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -94,7 +98,6 @@ public class MainService extends Service {
 
     public BleDevice mBleDevice; //디바이스 주소
     public boolean isBleDevice = false;
-    public boolean isAutoConnect = true;
     public boolean isDiscoverBle = false;
 
 
@@ -189,18 +192,13 @@ public class MainService extends Service {
 
     public static byte[] CycleData = new byte[164];    // Ts2에서 오는 정주기
     private Facade mFacade;
-    private SettingInfo mSettingInfo;
 
     private File mFolderPath = new File(Environment.getExternalStorageDirectory(), "DTG");
-    private static boolean hasTS2_ble = false;
-    private boolean tryConnect = false;
     private RetrofitLib mRetrofit;
     private CommonCollection mCommon;
     private FileLib mFileLib;
 
     private BleDevice mCurrentBleDevice = null;  //현재 연결된 블루투스값
-
-    private boolean isConnectedFinish = false;
 
     /**
      * socket io
@@ -245,8 +243,7 @@ public class MainService extends Service {
         if (mDTGBasicData != null) {  // 디티지 기본값이 있을때
 
             mDTGSerialNumber = mDTGBasicData.getDtgSerialNumber();
-            mBleDevice = mDTGBasicData.getBleDevice();
-//            Log.d(TAG, "mDTGSerialNumber: " + mDTGSerialNumber + mBleDevice);
+            BluetoothDevice sharedBleDevice = mDTGBasicData.getBleDevice();
 
             if (mDTGSerialNumber != null) {  //시리얼번호가 있을때
 
@@ -256,8 +253,14 @@ public class MainService extends Service {
                 isDTGSerialNumber = false;
             }
 
-            if (mBleDevice != null) {  // BLE 정보가 있을때
+            if (sharedBleDevice != null) {  // BLE 정보가 있을때
+                BluetoothManager bluetoothManager = (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
+                BluetoothAdapter bluetoothAdapter = bluetoothManager.getAdapter();
+                BluetoothDevice bluetoothDevice = bluetoothAdapter.getRemoteDevice(sharedBleDevice.getAddress());
+                BleDevice bleDevice1 = new BleDevice(bluetoothDevice);
+                mBleDevice = bleDevice1;
                 isBleDevice = true;
+
             } else {
                 isBleDevice = false;
             }
@@ -272,10 +275,6 @@ public class MainService extends Service {
                 .enableLog(true)
                 .setOperateTimeout(5000);
         setScanRule(isBleDevice);
-
-//        if(isBleDevice){  //디바이스가 있으면
-//            connect(mBleDevice);
-//        }
 
         /////////////////////////////////////////////////
 
@@ -355,8 +354,14 @@ public class MainService extends Service {
 
                         Log.d(TAG, "onCreate: getAdapter");
                         createNoti(true);
-                        tryStartScan();
 
+                        if (isBleDevice) {
+
+
+                            tryConnect();
+                        } else {
+                            tryStartScan();
+                        }
                         break;
                     case ACTION_CLICK_NOTIBAR: //노티 클릭
 
@@ -410,21 +415,6 @@ public class MainService extends Service {
 
     public void createNoti(boolean firstNoti) {
 
-
-//        startForeground(1, new Notification());
-//
-//        NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
-//        Notification notification;
-//
-//        notification = new Notification.Builder(getApplicationContext())
-//                .setContentTitle("")
-//                .setContentText("")
-//                .build();
-//
-//        nm.notify(1, notification);
-//        nm.cancel(1);
-
-
         if (firstNoti) {
             mBLEStateNoti = new NotificationCompat.Builder(this, "0")
                     .setContentTitle("")
@@ -464,33 +454,36 @@ public class MainService extends Service {
      * 스캔 룰 셋팅
      */
     private void setScanRule(boolean isBleDevice) {
+        BleScanRuleConfig scanRuleConfig = null;
 
         if (isBleDevice) {
 
-            BleScanRuleConfig scanRuleConfig = new BleScanRuleConfig.Builder()
+            scanRuleConfig = new BleScanRuleConfig.Builder()
 //                .setServiceUuids(UUID_SERVICE)      // 只扫描指定的服务的设备，可选
                     .setDeviceName(true, DEVICE_NAME)   // 只扫描指定广播名的设备，可选
                     .setDeviceMac(mBleDevice.getMac())  // 只扫描指定mac的设备，可选  //BLE주소값 있으면 설정
                     .setAutoConnect(true)      // 连接时的autoConnect参数，可选，默认false
                     .setScanTimeOut(TIME_OUT_SCAN)              // 扫描超时时间，可选，默认10秒
                     .build();
-            BleManager.getInstance().initScanRule(scanRuleConfig);
         } else {
             Log.d(TAG, "dtgBleMac: setScanRule");
-            BleScanRuleConfig scanRuleConfig = new BleScanRuleConfig.Builder()
+            scanRuleConfig = new BleScanRuleConfig.Builder()
                     .setDeviceName(true, DEVICE_NAME)   // 只扫描指定广播名的设备，可选
                     .setAutoConnect(true)      // 连接时的autoConnect参数，可选，默认false
                     .setScanTimeOut(TIME_OUT_SCAN)              // 扫描超时时间，可选，默认10秒
                     .build();
-            BleManager.getInstance().initScanRule(scanRuleConfig);
         }
 
+        if (scanRuleConfig != null) {
+            BleManager.getInstance().initScanRule(scanRuleConfig);
+        }
     }
 
     private void startScan() {
         BleManager.getInstance().scan(new BleScanCallback() {
             @Override
             public void onScanStarted(boolean success) {
+                Log.d(TAG, "onScanStarted: ");
 //                createNoti(true, "블루투스 기기와 연결 시도중");
 //                EventBus.getDefault().post(new BleStateEvent("블루투스 기기와 연결 시도중"));
             }
@@ -507,8 +500,11 @@ public class MainService extends Service {
 
                             if (!isBleDevice) { //bledevice 정보 없으면 저장
                                 Log.d(TAG, "mDTGBasicData: isBleDevice값들어감");
-                                mTinySharedPreference.putObject(DTG_BASIC_DATA, new DTGBasicData(bleDevice, mDTGSerialNumber));
+                                mTinySharedPreference.putObject(DTG_BASIC_DATA, new DTGBasicData(bleDevice.getDevice(), mDTGSerialNumber));
                                 mBleDevice = bleDevice;
+
+                                Log.d(TAG, "onLeScan: " + mBleDevice.getName());
+
                             }
 
                             Handler handler = new Handler(Looper.getMainLooper());
@@ -532,7 +528,6 @@ public class MainService extends Service {
             public void onScanFinished(List<BleDevice> scanResultList) {
 
                 if (!isDiscoverBle) {
-
                     try {
                         Thread.sleep(2000);
                         EventBus.getDefault().post(new ToastEvent("근처에 기기가 검색이 되지 않습니다."));
@@ -546,6 +541,9 @@ public class MainService extends Service {
         });
     }
 
+    /**
+     * 스캔 시작
+     */
     private void tryStartScan() {
         if (!BleManager.getInstance().isBlueEnable()) {  //블루투스 안 켜짐
             isEnableBle = false;
@@ -554,6 +552,21 @@ public class MainService extends Service {
             checkEnableBluetooth(true);
         } else {
             startScan();
+        }
+    }
+
+    /**
+     * 연결 시작
+     */
+    private void tryConnect() {
+
+        if (!BleManager.getInstance().isBlueEnable()) {  //블루투스 안 켜짐
+            isEnableBle = false;
+//                            createNoti(true, "블루투스 켜는 중");
+            BleManager.getInstance().enableBluetooth();
+            checkEnableBluetooth(false);
+        } else {
+            EventBus.getDefault().post(new StartConnectEvent());
         }
     }
 
@@ -597,61 +610,15 @@ public class MainService extends Service {
             public void onDisConnected(boolean isActiveDisConnected, BleDevice device, BluetoothGatt gatt, int status) {
                 Log.d(TAG, "onDisConnected: ");
 
-//                if (mCurrentBleDevice != null) {
-//                    mCurrentBleDevice = null;
-//                }
-
-//                if (BleManager.getInstance().isConnected(device)) {
-//                    BleManager.getInstance().disconnect(device);
-//                }
-                if (!isConnectedFinish) {  //진짜 연결 종료하려면 true
-                    BleManager.getInstance().removeNotifyCallback(mCurrentBleDevice, UUID_CHAR_READ);
-                    BleManager.getInstance().removeConnectGattCallback(mCurrentBleDevice);
-
-//                    createNoti(false, "블루투스 기기와 연결 실패");
-//                EventBus.getDefault().post(new BleStateEvent("블루투스 기기와 연결 실패"));
-
-//                if (!isCheckForChangedData) {
-
-
-                    try {
-                        Thread.sleep(2000);
-//                        isDiscoverBle = false;
-                        if (!BleManager.getInstance().isBlueEnable()) {  //블루투스 안 켜짐
-                            isEnableBle = false;
-//                            createNoti(true, "블루투스 켜는 중");
-                            BleManager.getInstance().enableBluetooth();
-                            checkEnableBluetooth(false);
-                        } else {
-                            Handler handler = new Handler(Looper.getMainLooper());
-                            handler.post(new Runnable() {
-                                @Override
-                                public void run() {
-                                    connect(bleDevice);
-                                    Log.d(TAG, "run: " + bleDevice.getMac());
-                                }
-                            });
-                        }
-//                        sendNotiAction(ACTION_START_CONNECT);
-                    } catch (InterruptedException e) {
-                    }
-//                }
+                try {
+                    Thread.sleep(2000);
+                } catch (InterruptedException e) {
                 }
+                tryConnect();
             }
         });
     }
 
-    private void tryConnect() {
-        if (!BleManager.getInstance().isBlueEnable()) {  //블루투스 안 켜짐
-            isEnableBle = false;
-//            createNoti(true, "블루투스 켜는 중");
-//            EventBus.getDefault().post(new BleStateEvent("블루투스 켜는 중"));
-            BleManager.getInstance().enableBluetooth();
-//            checkEnableBluetooth();
-        } else {
-            startScan();
-        }
-    }
 
     private void startNotify(final BleDevice bleDevice) {
         BleManager.getInstance().notify(bleDevice, UUID_SERVICE, UUID_CHAR_READ, new BleNotifyCallback() {
@@ -672,7 +639,7 @@ public class MainService extends Service {
             public void onNotifyFailure(BleException exception) {
                 Log.d(TAG, "onNotifyFailure: " + exception);
 //                createNoti(false, "블루투스 기기 데이터 통신 실패");
-                BleManager.getInstance().disconnect(mCurrentBleDevice);
+//                BleManager.getInstance().disconnect(mCurrentBleDevice);
 
 //                EventBus.getDefault().post(new BleStateEvent("블루투스 기기 데이터 통신 실패" + exception));
             }
@@ -834,13 +801,13 @@ public class MainService extends Service {
             setLocationAlarm(false);  //알람 해제
         }
 
+
         if (mCurrentBleDevice != null) {
             mCurrentBleDevice = null;
             BleManager.getInstance().stopNotify(mCurrentBleDevice, UUID_SERVICE, UUID_CHAR_WRITE);
         }
 
         if (BleManager.getInstance().isConnected(mCurrentBleDevice)) {
-            isConnectedFinish = true;
             BleManager.getInstance().disconnect(mCurrentBleDevice);
         }
         BleManager.getInstance().destroy();
@@ -969,7 +936,7 @@ public class MainService extends Service {
             handler.post(new Runnable() {
                 @Override
                 public void run() {
-                    connect(mCurrentBleDevice);
+                    connect(mBleDevice);
                 }
             });
         }
@@ -1531,7 +1498,7 @@ public class MainService extends Service {
 
                         }
                         Log.d(TAG, "mDTGBasicData: isDTGSerialNumber 값 들어감");
-                        mTinySharedPreference.putObject(DTG_BASIC_DATA, new DTGBasicData(mBleDevice, str));  //쉐어드에 시리얼번호 넣고
+                        mTinySharedPreference.putObject(DTG_BASIC_DATA, new DTGBasicData(mBleDevice.getDevice(), str));  //쉐어드에 시리얼번호 넣고
 
 
                         mDTGSerialNumber = str;  //변수에 시리얼번호 입력
