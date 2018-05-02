@@ -18,6 +18,8 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />     <!--gps-->
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
 
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />    <!-- 부팅시 서비스 시작하는 기능 권한-->
+
 
 
     <application
@@ -46,12 +48,25 @@
             android:exported="false" />
 
         <!--브로드캐스트리시버-->
-        <receiver android:name=".receiver.AlarmReceiver">
+        <receiver android:name=".receiver.AlarmReceiver"
+            android:enabled="true"
+            android:exported="false" >
             <intent-filter>
                 <action android:name="action_alarm_dtg_data" />
                 <action android:name="action_alarm_dtg_location" />
             </intent-filter>
         </receiver>
+
+        <receiver
+            android:name=".receiver.ServiceStartReceiver"
+            android:enabled="true"
+            android:exported="false" >
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="action_alarm_dead_service" />
+            </intent-filter>
+        </receiver>
+
     </application>
 
 </manifest>

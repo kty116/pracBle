@@ -1,6 +1,7 @@
 package com.deltaworks.pracble.service;
 
 import android.app.AlarmManager;
+import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
@@ -68,6 +69,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import io.fabric.sdk.android.Fabric;
 import okhttp3.MediaType;
 import okhttp3.RequestBody;
 import retrofit2.Call;
@@ -131,6 +133,16 @@ public class MainService extends Service {
     private int mIdOfLastData;
 
     private int limitTheNumberOfFiles = 4;
+
+    /**
+     * 핸드폰 부팅시 리시버
+     */
+    public static final String ACTION_ALARM_BOOT_HANDPHONE = "android.intent.action.BOOT_COMPLETED";
+    /**
+     * 서비스 죽을때 리시버
+     */
+    public static final String ACTION_ALARM_DEAD_SERVICE = "action_alarm_dead_service";
+
 
     /**
      * 블루투스 연결시 데이터 성공적으로 오는지 확인하는 알람 변수
@@ -219,6 +231,7 @@ public class MainService extends Service {
 
         Stetho.initializeWithDefaults(this);
         EventBus.getDefault().register(this);
+        Fabric.with(this, new Crashlytics());
 
         /////////////////////// 서버에서 변경되는 설정값 가져오는 곳 //////////////////////
 
@@ -341,7 +354,7 @@ public class MainService extends Service {
                     case ACTION_START_CONNECT: //서비스 시작
 
                         Log.d(TAG, "onCreate: getAdapter");
-
+                        createNoti(true);
                         tryStartScan();
 
                         break;
@@ -395,24 +408,41 @@ public class MainService extends Service {
         startService(intent);
     }
 
-    public void createNoti(boolean firstNoti, String text) {
+    public void createNoti(boolean firstNoti) {
+
+
+//        startForeground(1, new Notification());
+//
+//        NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+//        Notification notification;
+//
+//        notification = new Notification.Builder(getApplicationContext())
+//                .setContentTitle("")
+//                .setContentText("")
+//                .build();
+//
+//        nm.notify(1, notification);
+//        nm.cancel(1);
+
 
         if (firstNoti) {
             mBLEStateNoti = new NotificationCompat.Builder(this, "0")
-                    .setContentTitle("DTG")
+                    .setContentTitle("")
                     .setSmallIcon(R.mipmap.ic_launcher)
-                    .setContentText(text)  //연결 상태에 따라 text 다르게 설정
+//                    .setContentText(text)  //연결 상태에 따라 text 다르게 설정
                     .setContentIntent(clickNotiPendingIntent());  //노티 클릭설정
 //                    .addAction(R.drawable.ic_launcher_background, "CLOSE", closeNotiPendingIntent());
 
             startForeground(1, mBLEStateNoti.build());
-        } else {
-            NotificationManager mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-            mBLEStateNoti.setContentText(text);
-            mNotificationManager.notify(1, mBLEStateNoti.build());
 
 
         }
+//        } else {
+//            NotificationManager mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+////            mBLEStateNoti.setContentText(text);
+//            mNotificationManager.notify(1, mBLEStateNoti.build());
+//        }
+
     }
 
 //    private PendingIntent closeNotiPendingIntent() {
@@ -461,7 +491,7 @@ public class MainService extends Service {
         BleManager.getInstance().scan(new BleScanCallback() {
             @Override
             public void onScanStarted(boolean success) {
-                createNoti(true, "블루투스 기기와 연결 시도중");
+//                createNoti(true, "블루투스 기기와 연결 시도중");
 //                EventBus.getDefault().post(new BleStateEvent("블루투스 기기와 연결 시도중"));
             }
 
@@ -519,7 +549,7 @@ public class MainService extends Service {
     private void tryStartScan() {
         if (!BleManager.getInstance().isBlueEnable()) {  //블루투스 안 켜짐
             isEnableBle = false;
-            createNoti(true, "블루투스 켜는 중");
+//            createNoti(true, "블루투스 켜는 중");
             BleManager.getInstance().enableBluetooth();
             checkEnableBluetooth(true);
         } else {
@@ -554,7 +584,7 @@ public class MainService extends Service {
             @Override
             public void onConnectSuccess(BleDevice bleDevice, BluetoothGatt gatt, int status) {
                 Log.d(TAG, "onConnectSuccess: ");
-                createNoti(false, "블루투스 기기와 연결 성공");
+//                createNoti(false, "블루투스 기기와 연결 성공");
 //                EventBus.getDefault().post(new BleStateEvent("블루투스 기기와 연결 성공"));
                 mCurrentBleDevice = bleDevice;
                 BleManager.getInstance().cancelScan();
@@ -578,7 +608,7 @@ public class MainService extends Service {
                     BleManager.getInstance().removeNotifyCallback(mCurrentBleDevice, UUID_CHAR_READ);
                     BleManager.getInstance().removeConnectGattCallback(mCurrentBleDevice);
 
-                    createNoti(false, "블루투스 기기와 연결 실패");
+//                    createNoti(false, "블루투스 기기와 연결 실패");
 //                EventBus.getDefault().post(new BleStateEvent("블루투스 기기와 연결 실패"));
 
 //                if (!isCheckForChangedData) {
@@ -589,7 +619,7 @@ public class MainService extends Service {
 //                        isDiscoverBle = false;
                         if (!BleManager.getInstance().isBlueEnable()) {  //블루투스 안 켜짐
                             isEnableBle = false;
-                            createNoti(true, "블루투스 켜는 중");
+//                            createNoti(true, "블루투스 켜는 중");
                             BleManager.getInstance().enableBluetooth();
                             checkEnableBluetooth(false);
                         } else {
@@ -614,7 +644,7 @@ public class MainService extends Service {
     private void tryConnect() {
         if (!BleManager.getInstance().isBlueEnable()) {  //블루투스 안 켜짐
             isEnableBle = false;
-            createNoti(true, "블루투스 켜는 중");
+//            createNoti(true, "블루투스 켜는 중");
 //            EventBus.getDefault().post(new BleStateEvent("블루투스 켜는 중"));
             BleManager.getInstance().enableBluetooth();
 //            checkEnableBluetooth();
@@ -628,7 +658,7 @@ public class MainService extends Service {
             @Override
             public void onNotifySuccess() {
                 BleManager.getInstance().cancelScan();
-                createNoti(false, "블루투스 기기 데이터 통신 중");
+//                createNoti(false, "블루투스 기기 데이터 통신 중");
 //                EventBus.getDefault().post(new BleStateEvent("블루투스 기기 데이터 통신 중"));
                 Log.d(TAG, "onNotifySuccess: ");
 
@@ -641,7 +671,7 @@ public class MainService extends Service {
             @Override
             public void onNotifyFailure(BleException exception) {
                 Log.d(TAG, "onNotifyFailure: " + exception);
-                createNoti(false, "블루투스 기기 데이터 통신 실패");
+//                createNoti(false, "블루투스 기기 데이터 통신 실패");
                 BleManager.getInstance().disconnect(mCurrentBleDevice);
 
 //                EventBus.getDefault().post(new BleStateEvent("블루투스 기기 데이터 통신 실패" + exception));
@@ -804,10 +834,6 @@ public class MainService extends Service {
             setLocationAlarm(false);  //알람 해제
         }
 
-//        if (isStartedCheckForChangedDataAlarm) {
-//            setCheckForChangeDataAlarm(false);  //알람 해제
-//        }
-
         if (mCurrentBleDevice != null) {
             mCurrentBleDevice = null;
             BleManager.getInstance().stopNotify(mCurrentBleDevice, UUID_SERVICE, UUID_CHAR_WRITE);
@@ -823,6 +849,12 @@ public class MainService extends Service {
 //        mSocket.off("받을 이벤트명", onNewMessage);  //socket io 리스너 없애기
         EventBus.getDefault().unregister(this);
         stopForeground(true);  //노티피케이션 지우기
+
+        //연결 해제한뒤 다시 서비스 시작
+
+        Intent intent1 = new Intent(getApplicationContext(), MainService.class);
+        intent1.setAction(MainService.ACTION_START_CONNECT);
+        getApplicationContext().startService(intent1);
     }
 
 

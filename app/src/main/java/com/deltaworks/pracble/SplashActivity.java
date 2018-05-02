@@ -50,15 +50,13 @@ public class SplashActivity extends AppCompatActivity {
 
         binding = DataBindingUtil.setContentView(this, R.layout.activity_splash);
 
-        Fabric.with(this, new Crashlytics());
+//        GlideDrawableImageViewTarget gifImage = new GlideDrawableImageViewTarget(binding.progressImage);
 
-        GlideDrawableImageViewTarget gifImage = new GlideDrawableImageViewTarget(binding.progressImage);
-
-        Glide.with(this)
-                .load("https://media.giphy.com/media/l4Ho7AfNzHCtwGR0s/giphy.gif")
-//                .diskCacheStrategy(DiskCacheStrategy.NONE)// 디스크 캐시 저장 off
-//                .skipMemoryCache(true) //메모리 캐시
-                .into(gifImage);
+//        Glide.with(this)
+//                .load("https://media.giphy.com/media/l4Ho7AfNzHCtwGR0s/giphy.gif")
+////                .diskCacheStrategy(DiskCacheStrategy.NONE)// 디스크 캐시 저장 off
+////                .skipMemoryCache(true) //메모리 캐시
+//                .into(gifImage);
 
         permissionCheck();
 

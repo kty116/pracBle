@@ -39,7 +39,7 @@ public class MainActivity extends AppCompatActivity {
      * 파싱 변수
      */
 
-    public static boolean sVisibleActivity;  //화면 보이면 노티 눌렀을때 다시 액티비티 켜지지 않게 설정하는 변수
+    public static boolean sVisibleActivity = false;  //화면 보이면 노티 눌렀을때 다시 액티비티 켜지지 않게 설정하는 변수
 
     public static final String TAG = MainActivity.class.getSimpleName();
     private ActivityMainBinding binding;
@@ -79,7 +79,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         getMenuInflater().inflate(R.menu.menu_main, menu);
-        return true;
+        return false;
     }
 
     @Override
@@ -92,10 +92,10 @@ public class MainActivity extends AppCompatActivity {
         //noinspection SimplifiableIfStatement
         if (id == R.id.action_close) {
 
-            stopService(mGattServiceIntent);
-            finish();
+//            stopService(mGattServiceIntent);
+//            finish();
 
-            return true;
+            return false;
         }
 
         return super.onOptionsItemSelected(item);

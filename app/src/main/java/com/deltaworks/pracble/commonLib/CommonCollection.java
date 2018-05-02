@@ -3,6 +3,7 @@ package com.deltaworks.pracble.commonLib;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothManager;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.util.Log;
@@ -57,6 +58,7 @@ public class CommonCollection {
         }
         return networkType;
     }
+
 
     /**
      * 거리 측정
