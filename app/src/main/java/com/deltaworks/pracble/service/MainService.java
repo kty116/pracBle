@@ -1112,6 +1112,7 @@ public class MainService extends Service {
             public void onFailure(Call<ResponseInfo> call, Throwable t) {
                 Log.d(TAG, "실패" + t.toString());
                 Crashlytics.log("파일 올리기 실패" + t.toString());
+                isSentLocationData = true;
 
             }
 
