@@ -25,6 +25,8 @@ import android.os.Looper;
 import android.support.v4.app.NotificationCompat;
 import android.telephony.TelephonyManager;
 import android.util.Log;
+import android.view.View;
+import android.widget.RemoteViews;
 
 import com.clj.fastble.BleManager;
 import com.clj.fastble.callback.BleGattCallback;
@@ -417,10 +419,11 @@ public class MainService extends Service {
 
         if (firstNoti) {
             mBLEStateNoti = new NotificationCompat.Builder(this, "0")
-                    .setContentTitle("")
+                    .setContentTitle("DTG")
                     .setSmallIcon(R.mipmap.ic_launcher)
 //                    .setContentText(text)  //연결 상태에 따라 text 다르게 설정
                     .setContentIntent(clickNotiPendingIntent());  //노티 클릭설정
+
 //                    .addAction(R.drawable.ic_launcher_background, "CLOSE", closeNotiPendingIntent());
 
             startForeground(1, mBLEStateNoti.build());
@@ -954,7 +957,7 @@ public class MainService extends Service {
             Cursor dtgData = mFacade.queryDTGAllData();
             if (dtgData != null && dtgData.getCount() > 0) { //데이터에 값 있을때
                 if (dbDataToFile()) {
-                    Log.d(TAG, "setUploadFileToServer: 파일보내기");
+//                    Log.d(TAG, "setUploadFileToServer: 파일보내기");
                     uploadFileToServer(mFolderPath.getAbsolutePath());
                 }
             }
