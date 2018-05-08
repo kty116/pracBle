@@ -130,6 +130,9 @@ public class MainService extends Service {
 
     private int limitTheNumberOfFiles = 4;
 
+
+    private boolean isStartedBluetoothAlarm = false;
+
     /**
      * 핸드폰 부팅시 리시버
      */
@@ -138,6 +141,9 @@ public class MainService extends Service {
      * 서비스 죽을때 리시버
      */
     public static final String ACTION_ALARM_WAKE_UP_SERVICE = "action_alarm_wake_up_service";
+
+
+    public static final String ACTION_ALARM_BLUETOOTH_ON = "action_alarm_bluetooth_on";
 
 
     /**
@@ -154,6 +160,12 @@ public class MainService extends Service {
      */
     private double mTotalDistance = 0;
 
+    /**
+     * 블루투스 상태
+     */
+    private boolean isBleOff;
+
+    private boolean isTryConnect = false;
 
     /**
      * 블루투스 켜기 변수
@@ -218,7 +230,10 @@ public class MainService extends Service {
     public void onCreate() {
         super.onCreate();
 
-        registerReceiver(mInternetReceiver, new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION));  //인터넷 연결 상태 브로드캐스트 리시버 등록
+        IntentFilter intentFilter = new IntentFilter();
+        intentFilter.addAction(ConnectivityManager.CONNECTIVITY_ACTION); //인터넷 연결 상태 브로드캐스트 리시버 등록
+        intentFilter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED); //BLUETOOTH 연결 상태
+        registerReceiver(mInternetReceiver, intentFilter);
 
         Stetho.initializeWithDefaults(this);
         EventBus.getDefault().register(this);
@@ -349,8 +364,6 @@ public class MainService extends Service {
                         createNoti(true);
 
                         if (isBleDevice) {
-
-
                             tryConnect();
                         } else {
                             tryStartScan();
@@ -358,12 +371,12 @@ public class MainService extends Service {
                         break;
                     case ACTION_CLICK_NOTIBAR: //노티 클릭
 
-                        if (!MainActivity.sVisibleActivity) {
+                        if (!MainActivity.sVisibleActivity) {  //false
                             //메인 액티비티가 보이지 않을때만 화면 새로 띄우기
                             Intent intent1 = new Intent(getApplicationContext(), MainActivity.class);
                             intent1.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                             startActivity(intent1);
-//                            getApplicationContext().startActivity(new Intent(getApplicationContext(), MainActivity.class));
+//                            startActivity(new Intent(getApplicationContext(), MainActivity.class));
                         }
                 }
             }
@@ -393,7 +406,7 @@ public class MainService extends Service {
                             }
                         }
                     } catch (InterruptedException e) {
-
+//                        Log.d(TAG, "run: dddddd");
                     }
                 }
             }
@@ -443,7 +456,7 @@ public class MainService extends Service {
 
         Intent clickNotiIntent = new Intent(this, this.getClass());
         clickNotiIntent.setAction(ACTION_CLICK_NOTIBAR);
-        PendingIntent pending = PendingIntent.getService(this, 1, clickNotiIntent, PendingIntent.FLAG_IMMUTABLE);
+        PendingIntent pending = PendingIntent.getService(this, 1, clickNotiIntent, PendingIntent.FLAG_UPDATE_CURRENT);
         return pending;
     }
 
@@ -562,7 +575,9 @@ public class MainService extends Service {
 //                            createNoti(true, "블루투스 켜는 중");
             BleManager.getInstance().enableBluetooth();
             checkEnableBluetooth(false);
+            Log.d(TAG, "tryConnect: 블루투스 안 켜짐");
         } else {
+            Log.d(TAG, "tryConnect: 블루투스 켜짐");
             EventBus.getDefault().post(new StartConnectEvent());
         }
     }
@@ -572,6 +587,8 @@ public class MainService extends Service {
             @Override
             public void onStartConnect() {
                 Log.d(TAG, "onStartConnect: ");
+                isTryConnect = false;
+
             }
 
             @Override
@@ -604,14 +621,17 @@ public class MainService extends Service {
             }
 
             @Override
-            public void onDisConnected(boolean isActiveDisConnected, BleDevice device, BluetoothGatt gatt, int status) {
+            public void onDisConnected(boolean isActiveDisConnected, BleDevice
+                    device, BluetoothGatt gatt, int status) {
                 Log.d(TAG, "onDisConnected: ");
 
-                try {
-                    Thread.sleep(2000);
-                } catch (InterruptedException e) {
+                if (!isBleOff) {  //블루투스 꺼진게 아닐때
+                    try {
+                        Thread.sleep(2000);
+                    } catch (InterruptedException e) {
+                    }
+                    tryConnect();
                 }
-                tryConnect();
             }
         });
     }
@@ -694,7 +714,6 @@ public class MainService extends Service {
                         }
                     });
         } catch (NullPointerException e) {
-//            Log.d(TAG, "startCharWrite: 값이 없음");
         }
 
     }
@@ -705,7 +724,8 @@ public class MainService extends Service {
     private final BroadcastReceiver mInternetReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            final String action = intent.getAction();
+
+            String action = intent.getAction();
 
             if (ConnectivityManager.CONNECTIVITY_ACTION.equals(action)) {  //인터넷 연결 됐을때 오는 콜백 , 인터넷 연결 됐을때 쌓인 데이터 보내기
 
@@ -721,6 +741,48 @@ public class MainService extends Service {
 
                     setSendLocationToServer();
                 }
+            } else if (BluetoothAdapter.ACTION_STATE_CHANGED.equals(action)) {
+
+                final int state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR);
+                switch (state) {
+                    case BluetoothAdapter.STATE_OFF:
+                        Log.d(TAG, "STATE_OFF: ");
+
+
+                        break;
+                    case BluetoothAdapter.STATE_TURNING_OFF:
+                        Log.d(TAG, "STATE_TURNING_OFF: ");
+                        isBleOff = true;
+
+                        if(!isTryConnect) {
+                            Log.d(TAG, "onReceive: off 시도");
+                            isTryConnect = true;
+                            if (mBleDevice != null) {
+                                if (BleManager.getInstance().isConnected(mBleDevice)) {  //연결 돼있을때만 연결 끊기
+                                    BleManager.getInstance().disconnect(mBleDevice);
+                                }
+                                try {
+                                    Thread.sleep(2000);
+                                } catch (InterruptedException e) {
+                                }
+
+                                tryConnect();
+                            }
+                        }
+                        break;
+                    case BluetoothAdapter.STATE_ON:
+                        Log.d(TAG, "STATE_ON: ");
+                        if(!isStartedBluetoothAlarm) {
+                            isStartedBluetoothAlarm = true;  //알람 시작됨
+                            setBluetoothOnAlarm(true);
+                        }
+//                        isBleOff = false;
+                        break;
+                    case BluetoothAdapter.STATE_TURNING_ON:
+                        Log.d(TAG, "STATE_TURNING_ON: ");
+                        break;
+                }
+
             }
         }
     };
@@ -798,6 +860,10 @@ public class MainService extends Service {
             setLocationAlarm(false);  //알람 해제
         }
 
+        if(isStartedBluetoothAlarm) {
+            setBluetoothOnAlarm(false);
+        }
+
 
         if (mCurrentBleDevice != null) {
             mCurrentBleDevice = null;
@@ -848,7 +914,7 @@ public class MainService extends Service {
 
     public void setDataAlarm(boolean start) {
         Intent alarmIntent = new Intent(ACTION_ALARM_DTG_DATA);
-        PendingIntent pendingIntent = PendingIntent.getBroadcast(this, 1, alarmIntent, PendingIntent.FLAG_CANCEL_CURRENT);
+        PendingIntent pendingIntent = PendingIntent.getBroadcast(this, 1, alarmIntent, PendingIntent.FLAG_UPDATE_CURRENT);
         AlarmManager alarmManager = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
 //        long delay = mSettingInfo.getAlarmTime();  //설정안 변수로 가져오기
         long delay = UPLOAD_TIME;  //설정안 변수로 가져오기
@@ -868,7 +934,7 @@ public class MainService extends Service {
 
     public void setLocationAlarm(boolean start) {
         Intent alarmIntent = new Intent(ACTION_ALARM_DTG_LOCATION);
-        PendingIntent pendingIntent = PendingIntent.getBroadcast(this, 2, alarmIntent, PendingIntent.FLAG_CANCEL_CURRENT);
+        PendingIntent pendingIntent = PendingIntent.getBroadcast(this, 2, alarmIntent, PendingIntent.FLAG_UPDATE_CURRENT);
         AlarmManager alarmManager = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
         long delay = SEND_LOCATION_DATA_TIME;  //설정안 변수로 가져오기
 
@@ -887,9 +953,29 @@ public class MainService extends Service {
 
     public void setWakeUpAlarm(boolean start) {
         Intent alarmIntent = new Intent(ACTION_ALARM_WAKE_UP_SERVICE);
-        PendingIntent pendingIntent = PendingIntent.getBroadcast(this, 2, alarmIntent, PendingIntent.FLAG_CANCEL_CURRENT);
+        PendingIntent pendingIntent = PendingIntent.getBroadcast(this, 2, alarmIntent, PendingIntent.FLAG_UPDATE_CURRENT);
         AlarmManager alarmManager = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
         long delay = 5000;  //설정안 변수로 가져오기
+
+        if (start) {  //true면 알람 시작
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + delay, pendingIntent);
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+                alarmManager.setExact(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + delay, pendingIntent);
+            } else {
+                alarmManager.set(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + delay, pendingIntent);
+            }
+        } else {  //false면 알람 취소
+            alarmManager.cancel(pendingIntent);
+        }
+    }
+
+
+    public void setBluetoothOnAlarm(boolean start) {
+        Intent alarmIntent = new Intent(ACTION_ALARM_BLUETOOTH_ON);
+        PendingIntent pendingIntent = PendingIntent.getBroadcast(this, 2, alarmIntent, PendingIntent.FLAG_UPDATE_CURRENT);
+        AlarmManager alarmManager = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
+        long delay = 10000;  //설정안 변수로 가져오기
 
         if (start) {  //true면 알람 시작
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -940,6 +1026,20 @@ public class MainService extends Service {
                     Log.d(TAG, "onEvent: DATA 알람 옴");
 
                     setUploadFileToServer();  //파일 업로드
+                    break;
+
+                case ACTION_ALARM_BLUETOOTH_ON:
+                    Log.d(TAG, "onEvent: 블루투스 알람");
+                    isStartedBluetoothAlarm = false;
+                    if (mBleDevice != null) {
+                        if (!BleManager.getInstance().isConnected(mBleDevice)) {
+                            Log.d(TAG, "onEvent: 연결 안돼있음");
+                            tryConnect();
+                        }
+                    }
+//                    isBleOff = true;  //알람등록가능
+//                    tryConnect();
+
                     break;
 
 //                case ACTION_ALARM_CHECK_FOR_CHANGED_DATA:

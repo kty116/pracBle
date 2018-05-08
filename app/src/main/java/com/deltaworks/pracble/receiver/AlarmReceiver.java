@@ -33,6 +33,11 @@ public class AlarmReceiver extends BroadcastReceiver {//service로 가는 리시
                     EventBus.getDefault().post(new AlarmReceiverEvent(MainService.ACTION_ALARM_DTG_LOCATION));
                     break;
 
+                case MainService.ACTION_ALARM_BLUETOOTH_ON:
+                    Log.d(TAG, "ACTION_ALARM_BLUETOOTH_ON onReceive: ");
+                    EventBus.getDefault().post(new AlarmReceiverEvent(MainService.ACTION_ALARM_BLUETOOTH_ON));
+                    break;
+
 //            case MainService.ACTION_ALARM_CHECK_FOR_CHANGED_DATA:
 //                Log.d(TAG, "ACTION_ALARM_CHECK_FOR_CHANGED_DATA onReceive: ");
 //                EventBus.getDefault().post(new AlarmReceiverEvent(MainService.ACTION_ALARM_CHECK_FOR_CHANGED_DATA));

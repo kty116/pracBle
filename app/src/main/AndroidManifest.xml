@@ -54,6 +54,7 @@
             <intent-filter>
                 <action android:name="action_alarm_dtg_data" />
                 <action android:name="action_alarm_dtg_location" />
+                <action android:name="action_alarm_bluetooth_on" />
             </intent-filter>
         </receiver>
 
