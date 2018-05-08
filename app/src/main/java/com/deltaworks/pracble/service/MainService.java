@@ -1,8 +1,6 @@
 package com.deltaworks.pracble.service;
 
 import android.app.AlarmManager;
-import android.app.Notification;
-import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
 import android.bluetooth.BluetoothAdapter;
@@ -25,8 +23,6 @@ import android.os.Looper;
 import android.support.v4.app.NotificationCompat;
 import android.telephony.TelephonyManager;
 import android.util.Log;
-import android.view.View;
-import android.widget.RemoteViews;
 
 import com.clj.fastble.BleManager;
 import com.clj.fastble.callback.BleGattCallback;
@@ -54,23 +50,18 @@ import com.deltaworks.pracble.model.DTGInfo;
 import com.deltaworks.pracble.model.FileInfo;
 import com.deltaworks.pracble.model.FileRequestBody;
 import com.deltaworks.pracble.model.ResponseInfo;
-import com.deltaworks.pracble.model.SettingInfo;
 import com.deltaworks.pracble.retrofit.RetrofitLib;
 import com.facebook.stetho.Stetho;
 import com.google.gson.Gson;
 
 import org.greenrobot.eventbus.EventBus;
 import org.greenrobot.eventbus.Subscribe;
-import org.json.JSONException;
-import org.json.JSONObject;
 
 import java.io.File;
 import java.io.FilenameFilter;
-import java.net.URISyntaxException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.EventListener;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -142,11 +133,11 @@ public class MainService extends Service {
     /**
      * 핸드폰 부팅시 리시버
      */
-    public static final String ACTION_ALARM_BOOT_HANDPHONE = "android.intent.action.BOOT_COMPLETED";
+//    public static final String ACTION_ALARM_BOOT_HANDPHONE = "android.intent.action.BOOT_COMPLETED";
     /**
      * 서비스 죽을때 리시버
      */
-    public static final String ACTION_ALARM_DEAD_SERVICE = "action_alarm_dead_service";
+    public static final String ACTION_ALARM_WAKE_UP_SERVICE = "action_alarm_wake_up_service";
 
 
     /**
@@ -172,7 +163,7 @@ public class MainService extends Service {
     /**
      * dtg gps 데이터 값 - 거리 측정해서 위치 데이터 보내는 주기 설정을 위함
      */
-    private Location mCurrentLocation = new Location("cur");
+    private Location mCurrentLocation;
     private Location mPreviousLocation;
 
 
@@ -369,7 +360,10 @@ public class MainService extends Service {
 
                         if (!MainActivity.sVisibleActivity) {
                             //메인 액티비티가 보이지 않을때만 화면 새로 띄우기
-                            startActivity(new Intent(this, MainActivity.class));
+                            Intent intent1 = new Intent(getApplicationContext(), MainActivity.class);
+                            intent1.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                            startActivity(intent1);
+//                            getApplicationContext().startActivity(new Intent(getApplicationContext(), MainActivity.class));
                         }
                 }
             }
@@ -421,7 +415,7 @@ public class MainService extends Service {
             mBLEStateNoti = new NotificationCompat.Builder(this, "0")
                     .setContentTitle("DTG")
                     .setSmallIcon(R.mipmap.ic_launcher)
-//                    .setContentText(text)  //연결 상태에 따라 text 다르게 설정
+                    .setContentText("오늘도 좋은 하루 되세요~~!")  //연결 상태에 따라 text 다르게 설정
                     .setContentIntent(clickNotiPendingIntent());  //노티 클릭설정
 
 //                    .addAction(R.drawable.ic_launcher_background, "CLOSE", closeNotiPendingIntent());
@@ -822,9 +816,13 @@ public class MainService extends Service {
 
         //연결 해제한뒤 다시 서비스 시작
 
-        Intent intent1 = new Intent(getApplicationContext(), MainService.class);
-        intent1.setAction(MainService.ACTION_START_CONNECT);
-        getApplicationContext().startService(intent1);
+//        Intent intent1 = new Intent(getApplicationContext(), MainService.class);
+//        intent1.setAction(MainService.ACTION_START_CONNECT);
+//        getApplicationContext().startService(intent1);
+
+        setWakeUpAlarm(true);
+
+
     }
 
 
@@ -873,6 +871,25 @@ public class MainService extends Service {
         PendingIntent pendingIntent = PendingIntent.getBroadcast(this, 2, alarmIntent, PendingIntent.FLAG_CANCEL_CURRENT);
         AlarmManager alarmManager = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
         long delay = SEND_LOCATION_DATA_TIME;  //설정안 변수로 가져오기
+
+        if (start) {  //true면 알람 시작
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + delay, pendingIntent);
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+                alarmManager.setExact(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + delay, pendingIntent);
+            } else {
+                alarmManager.set(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + delay, pendingIntent);
+            }
+        } else {  //false면 알람 취소
+            alarmManager.cancel(pendingIntent);
+        }
+    }
+
+    public void setWakeUpAlarm(boolean start) {
+        Intent alarmIntent = new Intent(ACTION_ALARM_WAKE_UP_SERVICE);
+        PendingIntent pendingIntent = PendingIntent.getBroadcast(this, 2, alarmIntent, PendingIntent.FLAG_CANCEL_CURRENT);
+        AlarmManager alarmManager = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
+        long delay = 5000;  //설정안 변수로 가져오기
 
         if (start) {  //true면 알람 시작
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -1648,25 +1665,20 @@ public class MainService extends Service {
 
             if (mPreviousLocation != null) {
                 //지금데이터 위치데이터에 넣고
+                mCurrentLocation = new Location("cur");
                 mCurrentLocation.setLatitude(Double.parseDouble(mCarLatText));
                 mCurrentLocation.setLongitude(Double.parseDouble(mCarLonText));
 
                 double currentDistance = mPreviousLocation.distanceTo(mCurrentLocation);  //전, 현 데이터 비교
-//                Log.d(TAG, "sendDataAfterDistanceComparison: " + currentDistance);
+//                Log.d(TAG, "currentDistance: " + mPreviousLocation.getLatitude());
+//                Log.d(TAG, "currentDistance: " + mCurrentLocation.getLatitude());
 
-                mTotalDistance += currentDistance; // 토탈 거리에 달라진값 더하고
-
-                if (mTotalDistance > 15) {  //15m 이상이면 서버로 현 위치 데이터 보냄
+                if (currentDistance >= 15) {  //15m 이상이면 서버로 현 위치 데이터 보냄
                     setSendLocationToServer();
-//                    Log.d(TAG, "dataParsing: " + mTotalDistance + "서버로 전송");
-                    mTotalDistance = 0;
+                    mPreviousLocation = mCurrentLocation;  // 전 위치에 현재 위치 넣기
                 }
-
-                mPreviousLocation = mCurrentLocation; // 비교 후 현재 데이터 전데이터에 넣기
-
             } else {
                 mPreviousLocation = new Location("pre");
-//                Log.d(TAG, "sendDataAfterDistanceComparison: " + mCarLatText);
                 mPreviousLocation.setLatitude(Double.parseDouble(mCarLatText));
                 mPreviousLocation.setLongitude(Double.parseDouble(mCarLonText));
             }
@@ -1683,5 +1695,6 @@ public class MainService extends Service {
             return false;
         }
     }
+
 }
 

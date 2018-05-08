@@ -63,7 +63,7 @@
             android:exported="false" >
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
-                <action android:name="action_alarm_dead_service" />
+                <action android:name="action_alarm_wake_up_service" />
             </intent-filter>
         </receiver>
 

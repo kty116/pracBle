@@ -20,13 +20,15 @@ public class ServiceStartReceiver extends BroadcastReceiver {
         if (intent != null) {
             String action = intent.getAction();
 
-            switch (action) {
-                case MainService.ACTION_ALARM_BOOT_HANDPHONE:
+            // ACTION_ALARM_BOOT_HANDPHONE or Action_ALARM_WAKE_UP_SERVICE 둘 중 하나의 액션일때
+
+//            switch (action) {
+//                case MainService.ACTION_ALARM_BOOT_HANDPHONE:
                     Intent intent1 = new Intent(context, MainService.class);
                     intent1.setAction(MainService.ACTION_START_CONNECT);
                     context.startService(intent1);
-                    break;
-            }
+//                    break;
+//            }
         }
     }
 }
